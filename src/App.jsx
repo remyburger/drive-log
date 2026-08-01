@@ -248,4 +248,174 @@ export default function App() {
     const afterAchieved = achievedSet(afterTotals);
     const newly = MILESTONES.filter((m) => afterAchieved.has(m.id) && !beforeAchieved.has(m.id));
     if (newly.length > 0) {
-      const m = newl
+      const m = newly[newly.length - 1];
+      setToast({ icon: m.icon, label: m.label, detail: m.detail });
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToast(null), 5000);
+    }
+  };
+
+  const startSession = () => {
+    const startTime = new Date().toISOString();
+    persistActive({ id: uid(), date: startTime.slice(0, 10), startTime, companion: pendingCompanion, isNight: pendingNight });
+    setPendingNightAuto(true);
+  };
+
+  const endSession = () => {
+    if (!active) return;
+    const endTime = new Date().toISOString();
+    const durationMinutes = (new Date(endTime) - new Date(active.startTime)) / 60000;
+    const record = { ...active, endTime, durationMinutes };
+    const next = [record, ...sessionsRef.current];
+    fireMilestoneCheck(sessionsRef.current, next);
+    persistSessions(next);
+    persistActive(null);
+  };
+
+  const addManualSessions = (records) => {
+    const withIds = records.map((r) => ({ ...r, id: uid() }));
+    const next = [...withIds, ...sessionsRef.current];
+    fireMilestoneCheck(sessionsRef.current, next);
+    persistSessions(next);
+  };
+
+  const deleteSession = (id) => { persistSessions(sessionsRef.current.filter((s) => s.id !== id)); setConfirmDelete(null); };
+  const toggleNight = (id) => persistSessions(sessionsRef.current.map((s) => (s.id === id ? { ...s, isNight: !s.isNight } : s)));
+
+  const exportCSV = () => {
+    const header = ["Date", "Start Time", "End Time", "Duration (min)", "Companion", "Night Driving"];
+    const rows = [...sessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).map((s) => [
+      s.date, formatTime(s.startTime), formatTime(s.endTime), Math.round(s.durationMinutes),
+      COMPANIONS[s.companion]?.label ?? s.companion, s.isNight ? "Yes" : "No",
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `driving-log-${todayStr()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const openManual = () => {
+    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: deviceName || "mom", isNight: isNightFromHour(16) });
+    setSheet("manual");
+  };
+
+  const submitManual = () => {
+    const start = combineDateTime(manualForm.date, manualForm.startTime);
+    let end = combineDateTime(manualForm.date, manualForm.endTime);
+    if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
+    const durationMinutes = (end - start) / 60000;
+    addManualSessions([{
+      date: manualForm.date, startTime: start.toISOString(), endTime: end.toISOString(),
+      durationMinutes, companion: manualForm.companion, isNight: manualForm.isNight,
+    }]);
+    setSheet(null);
+  };
+
+  const closeSheet = () => setSheet(null);
+
+  const totals = computeTotals(sessions);
+  const achieved = achievedSet(totals);
+  const totalPct = Math.min(100, (totals.totalHours / TOTAL_GOAL) * 100);
+
+  const grouped = sessions.reduce((acc, s) => { (acc[s.date] = acc[s.date] || []).push(s); return acc; }, {});
+  const dateKeys = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
+
+  if (!sessionsLoaded || !activeLoaded) {
+    return (
+      <div style={{ background: COLORS.bg, minHeight: "100vh" }} className="flex items-center justify-center">
+        <div style={{ color: COLORS.inkSoft, fontFamily: "Work Sans, sans-serif" }}>Loading…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: COLORS.bg, minHeight: "100vh", fontFamily: "Work Sans, sans-serif", position: "relative" }}>
+      {toast && (
+        <div style={{ position: "sticky", top: 0, zIndex: 30, background: COLORS.ink, color: "#FFF", padding: "12px 16px", display: "flex", alignItems: "center", gap: "10px", boxShadow: SOFT_SHADOW }}>
+          <span style={{ fontSize: "18px" }}>{toast.icon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 600, fontSize: "14px" }}>{toast.label}</div>
+            <div style={{ fontSize: "12px", opacity: 0.75 }}>{toast.detail}</div>
+          </div>
+          <button onClick={() => setToast(null)} style={{ background: "none", border: "none", color: "#FFF", opacity: 0.6, cursor: "pointer" }}><X size={16} /></button>
+        </div>
+      )}
+
+      <div className="max-w-md mx-auto px-4 pt-8 pb-28">
+        {/* Header */}
+        <div className="mb-6">
+          <div style={{ color: COLORS.gold, fontFamily: "Space Grotesk, sans-serif", letterSpacing: "0.16em", fontSize: "11px", fontWeight: 600 }}>
+            50-HOUR DMV LOG
+          </div>
+          <h1 style={{
+            fontFamily: "Space Grotesk, sans-serif", fontSize: "30px", fontWeight: 700, marginTop: "2px",
+            background: `linear-gradient(120deg, ${COLORS.ink}, ${COLORS.sageDark})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+          }}>
+            Amelie's Drive Log
+          </h1>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "10px" }}>
+            <div style={{ display: "flex", gap: "4px" }}>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} style={{ width: "4px", height: "4px", borderRadius: "999px", background: i % 3 === 0 ? COLORS.gold : COLORS.divider }} />
+              ))}
+            </div>
+            <button onClick={() => setShowWhoPicker((v) => !v)} style={{
+              display: "flex", alignItems: "center", gap: "5px", background: COLORS.card, border: "1px solid rgba(43,42,39,0.08)",
+              borderRadius: "999px", padding: "4px 10px 4px 4px", cursor: "pointer", boxShadow: SOFT_SHADOW,
+            }}>
+              <div style={{
+                width: "18px", height: "18px", borderRadius: "999px",
+                background: deviceName ? COMPANIONS[deviceName].bg : COLORS.locked,
+                color: deviceName ? COMPANIONS[deviceName].color : COLORS.inkSoft,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, fontFamily: "Space Grotesk, sans-serif",
+              }}>
+                {deviceName ? deviceName[0].toUpperCase() : "?"}
+              </div>
+              <span style={{ fontSize: "11px", color: COLORS.inkSoft, fontWeight: 500 }}>
+                {deviceName ? COMPANIONS[deviceName].label : "Who's this?"}
+              </span>
+            </button>
+          </div>
+          {showWhoPicker && (
+            <div style={{ marginTop: "10px", background: COLORS.card, borderRadius: "14px", padding: "12px", boxShadow: SOFT_SHADOW }}>
+              <div style={{ fontSize: "12px", color: COLORS.inkSoft, marginBottom: "8px" }}>This device belongs to</div>
+              <div className="flex gap-2">
+                {Object.entries(COMPANIONS).map(([key, c]) => (
+                  <button key={key} onClick={() => chooseDeviceName(key)} style={{
+                    flex: 1, padding: "9px 0", borderRadius: "10px", fontFamily: "Space Grotesk, sans-serif", fontWeight: 600, fontSize: "14px",
+                    border: deviceName === key ? `1.5px solid ${c.color}` : "1.5px solid rgba(43,42,39,0.1)",
+                    background: deviceName === key ? c.bg : "transparent", color: deviceName === key ? c.color : COLORS.inkSoft, cursor: "pointer",
+                  }}>{c.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Hero session card */}
+        <div style={{ background: COLORS.card, borderRadius: "22px", boxShadow: active ? `0 0 0 1.5px ${COLORS.sage}, ${SOFT_SHADOW}` : SOFT_SHADOW, padding: "24px", marginBottom: "20px" }}>
+          {!active ? (
+            <>
+              <div style={{ color: COLORS.inkSoft, fontSize: "13px", marginBottom: "14px" }}>Who's riding along?</div>
+              <div className="mb-4"><CompanionToggle value={pendingCompanion} onChange={setPendingCompanion} /></div>
+              <div className="mb-1">
+                <NightToggle value={pendingNight} onChange={(v) => { setPendingNight(v); setPendingNightAuto(false); }} />
+              </div>
+              <div style={{ fontSize: "11px", color: COLORS.inkSoft, marginBottom: "18px", display: "flex", alignItems: "center", gap: "6px" }}>
+                {pendingNightAuto ? (
+                  <>Following the clock — it's currently {formatTime(new Date(clockNow).toISOString())}</>
+                ) : (
+                  <>
+                    Set manually.
+                    <button onClick={() => setPendingNightAuto(true)} style={{ background: "none", border: "none", color: COLORS.sageDark, fontWeight: 600, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                      Follow clock again
+                    </button>
+                  </>
+                )}
+              </div>
+              <button onClick={startSession} style={{
+                width: "100%", background: `linear-gradient(135deg, ${COLORS.sage}, ${COLORS.sageDark})`, color:
