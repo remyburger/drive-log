@@ -328,7 +328,7 @@ export default function App() {
           <h1 style={{
             fontFamily: theme.displayFont, fontSize: "30px", fontWeight: theme.displayWeight, marginTop: "2px",
             letterSpacing: theme.displayLetterSpacing, fontStyle: theme.displayStyle,
-            background: `linear-gradient(120deg, ${theme.ink}, ${theme.accentDark})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+            background: `linear-gradient(120deg, ${theme.ink}, ${theme.accentDark})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent", WebkitTextFillColor: "transparent",
           }}>
             {theme.title}
           </h1>
