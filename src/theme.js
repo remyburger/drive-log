@@ -1,7 +1,11 @@
-// Two visual "skins" for the app, switched based on the device's "Who's this?" picker.
+// Two visual "skins" for the app. Anyone can pick either one, regardless of
+// who's logged in — the last choice is remembered locally per device.
+
+export const THEME_PREF_KEY = "drivelog:theme-pref";
 
 export const MOM_THEME = {
   key: "mom",
+  label: "Cozy",
   title: "Amelie's Drive Log",
   eyebrow: "50-HOUR DMV LOG",
   exportPrefix: "driving-log",
@@ -42,6 +46,7 @@ export const MOM_THEME = {
 
 export const DAD_THEME = {
   key: "dad",
+  label: "Biker",
   title: "Road Rage Log",
   eyebrow: "50-HOUR RIDE-OR-DIE LOG",
   exportPrefix: "road-rage-log",
@@ -80,6 +85,23 @@ export const DAD_THEME = {
   },
 };
 
-export function getTheme(deviceName) {
-  return deviceName === "dad" ? DAD_THEME : MOM_THEME;
+export function getThemeByKey(key) {
+  return key === "dad" ? DAD_THEME : MOM_THEME;
+}
+
+export function loadThemePref() {
+  try {
+    const stored = window.localStorage.getItem(THEME_PREF_KEY);
+    return stored === "dad" ? "dad" : "mom";
+  } catch (e) {
+    return "mom";
+  }
+}
+
+export function saveThemePref(key) {
+  try {
+    window.localStorage.setItem(THEME_PREF_KEY, key);
+  } catch (e) {
+    /* ignore */
+  }
 }
