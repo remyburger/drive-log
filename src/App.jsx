@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Play, Square, Download, Clock, ChevronDown, X, Trash2, Moon, Sun,
-  Plus, Check, ArrowLeft,
+  Plus, Check, ArrowLeft, LogOut, Palette,
 } from "lucide-react";
 import { doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
-import { db } from "./firebase";
-import { getTheme } from "./theme";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { db, auth } from "./firebase";
+import { getThemeByKey, loadThemePref, saveThemePref, MOM_THEME, DAD_THEME } from "./theme";
+import { getRoleForEmail, ROLE_LABELS } from "./roles";
+import Login from "./Login";
 
 const TOTAL_GOAL = 50;
 const NIGHT_GOAL = 10;
@@ -27,7 +30,6 @@ const MILESTONES = [
 
 const sessionsDocRef = doc(db, "drivelog", "sessions");
 const activeDocRef = doc(db, "drivelog", "active");
-const DEVICE_NAME_KEY = "drivelog:device-name"; // localStorage, local to this browser only
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
@@ -125,14 +127,16 @@ function NightToggle({ value, onChange, theme, label }) {
 }
 
 export default function App() {
+  const [authUser, setAuthUser] = useState(undefined); // undefined = still checking, null = signed out
+  const [themeKey, setThemeKey] = useState(loadThemePref());
+  const [showThemePicker, setShowThemePicker] = useState(false);
+
   const [sessions, setSessions] = useState([]);
   const [active, setActive] = useState(null);
   const [pendingCompanion, setPendingCompanion] = useState("mom");
   const [pendingNight, setPendingNight] = useState(defaultIsNight());
   const [pendingNightAuto, setPendingNightAuto] = useState(true);
   const [clockNow, setClockNow] = useState(Date.now());
-  const [deviceName, setDeviceName] = useState(null);
-  const [showWhoPicker, setShowWhoPicker] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [activeLoaded, setActiveLoaded] = useState(false);
@@ -146,17 +150,19 @@ export default function App() {
   const [sheet, setSheet] = useState(null);
   const [manualForm, setManualForm] = useState({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: "mom", isNight: false });
 
-  const theme = getTheme(deviceName);
+  const theme = getThemeByKey(themeKey);
+  const role = authUser ? getRoleForEmail(authUser.email) : null;
 
+  // Track login state
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(DEVICE_NAME_KEY);
-      if (stored === "mom" || stored === "dad") {
-        setDeviceName(stored);
-        setPendingCompanion(stored);
-      }
-    } catch (e) { /* ignore */ }
+    const unsub = onAuthStateChanged(auth, (u) => setAuthUser(u));
+    return () => unsub();
   }, []);
+
+  // Once we know who's logged in, default the companion toggle to them (if mom or dad)
+  useEffect(() => {
+    if (role === "mom" || role === "dad") setPendingCompanion(role);
+  }, [role]);
 
   useEffect(() => {
     const unsubSessions = onSnapshot(sessionsDocRef, (snap) => {
@@ -192,6 +198,12 @@ export default function App() {
 
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
 
+  const chooseTheme = (key) => {
+    setThemeKey(key);
+    saveThemePref(key);
+    setShowThemePicker(false);
+  };
+
   const persistSessions = useCallback(async (next) => {
     sessionsRef.current = next;
     try { await setDoc(sessionsDocRef, { list: next }); } catch (e) { console.error("Failed to save sessions", e); }
@@ -203,13 +215,6 @@ export default function App() {
       else await deleteDoc(activeDocRef);
     } catch (e) { console.error("Failed to save active session", e); }
   }, []);
-
-  const chooseDeviceName = (name) => {
-    setDeviceName(name);
-    setPendingCompanion(name);
-    setShowWhoPicker(false);
-    try { window.localStorage.setItem(DEVICE_NAME_KEY, name); } catch (e) { /* ignore */ }
-  };
 
   const fireMilestoneCheck = (beforeSessions, afterSessions) => {
     const beforeAchieved = achievedSet(computeTotals(beforeSessions));
@@ -267,7 +272,7 @@ export default function App() {
   };
 
   const openManual = () => {
-    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: deviceName || "mom", isNight: isNightFromHour(16) });
+    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: (role === "mom" || role === "dad") ? role : "mom", isNight: isNightFromHour(16) });
     setSheet("manual");
   };
 
@@ -297,6 +302,20 @@ export default function App() {
     background: theme.key === "dad" ? "#1B1919" : "#FBF9F5", color: theme.ink, fontFamily: theme.bodyFont, fontSize: "14px", outline: "none",
   };
   const labelStyle = { fontSize: "12px", color: theme.inkSoft, fontWeight: 500, marginBottom: "5px", display: "block" };
+
+  // Still checking auth state
+  if (authUser === undefined) {
+    return (
+      <div style={{ background: theme.bg, minHeight: "100vh" }} className="flex items-center justify-center">
+        <div style={{ color: theme.inkSoft, fontFamily: theme.bodyFont }}>Loading…</div>
+      </div>
+    );
+  }
+
+  // Not signed in
+  if (!authUser) {
+    return <Login theme={theme} />;
+  }
 
   if (!sessionsLoaded || !activeLoaded) {
     return (
@@ -343,33 +362,36 @@ export default function App() {
                     <div key={i} style={{ width: "4px", height: "4px", borderRadius: "999px", background: i % 3 === 0 ? theme.gold : theme.divider }} />
                   ))}
             </div>
-            <button onClick={() => setShowWhoPicker((v) => !v)} style={{
-              display: "flex", alignItems: "center", gap: "5px", background: theme.card, border: `1px solid ${theme.inkSoft}22`,
-              borderRadius: "999px", padding: "4px 10px 4px 4px", cursor: "pointer", boxShadow: theme.shadow,
-            }}>
-              <div style={{
-                width: "18px", height: "18px", borderRadius: "999px",
-                background: deviceName ? COMPANIONS[deviceName].bg : theme.locked,
-                color: deviceName ? COMPANIONS[deviceName].color : theme.inkSoft,
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, fontFamily: theme.displayFont,
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowThemePicker((v) => !v)} style={{
+                display: "flex", alignItems: "center", gap: "5px", background: theme.card, border: `1px solid ${theme.inkSoft}22`,
+                borderRadius: "999px", padding: "5px 10px", cursor: "pointer", boxShadow: theme.shadow, color: theme.inkSoft, fontSize: "11px", fontWeight: 500,
               }}>
-                {deviceName ? deviceName[0].toUpperCase() : "?"}
-              </div>
-              <span style={{ fontSize: "11px", color: theme.inkSoft, fontWeight: 500 }}>
-                {deviceName ? COMPANIONS[deviceName].label : "Who's this?"}
-              </span>
-            </button>
+                <Palette size={13} /> {theme.label}
+              </button>
+              <button onClick={() => signOut(auth)} title="Sign out" style={{
+                display: "flex", alignItems: "center", gap: "4px", background: "transparent", border: "none",
+                color: theme.inkSoft, fontSize: "11px", cursor: "pointer", padding: "5px",
+              }}>
+                <LogOut size={13} />
+              </button>
+            </div>
           </div>
-          {showWhoPicker && (
+
+          <div style={{ marginTop: "6px", fontSize: "11px", color: theme.inkSoft }}>
+            Signed in as {ROLE_LABELS[role] || authUser.email}
+          </div>
+
+          {showThemePicker && (
             <div style={{ marginTop: "10px", background: theme.card, borderRadius: theme.radiusSm, padding: "12px", boxShadow: theme.shadow }}>
-              <div style={{ fontSize: "12px", color: theme.inkSoft, marginBottom: "8px" }}>This device belongs to</div>
+              <div style={{ fontSize: "12px", color: theme.inkSoft, marginBottom: "8px" }}>Choose a look — anyone can switch this anytime</div>
               <div className="flex gap-2">
-                {Object.entries(COMPANIONS).map(([key, c]) => (
-                  <button key={key} onClick={() => chooseDeviceName(key)} style={{
+                {[MOM_THEME, DAD_THEME].map((t) => (
+                  <button key={t.key} onClick={() => chooseTheme(t.key)} style={{
                     flex: 1, padding: "9px 0", borderRadius: theme.radiusSm, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "14px",
-                    border: deviceName === key ? `1.5px solid ${c.color}` : `1.5px solid ${theme.inkSoft}33`,
-                    background: deviceName === key ? c.bg : "transparent", color: deviceName === key ? c.color : theme.inkSoft, cursor: "pointer",
-                  }}>{c.label}</button>
+                    border: themeKey === t.key ? `1.5px solid ${theme.accent}` : `1.5px solid ${theme.inkSoft}33`,
+                    background: themeKey === t.key ? theme.accentBg : "transparent", color: themeKey === t.key ? theme.accent : theme.inkSoft, cursor: "pointer",
+                  }}>{t.label}</button>
                 ))}
               </div>
             </div>
