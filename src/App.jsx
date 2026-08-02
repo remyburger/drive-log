@@ -6,7 +6,7 @@ import {
 import { doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
-import { getThemeByKey, loadThemePref, saveThemePref, MOM_THEME, DAD_THEME } from "./theme";
+import { getThemeByKey, loadThemePref, saveThemePref, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
 import Login from "./Login";
 
@@ -152,6 +152,9 @@ export default function App() {
 
   const theme = getThemeByKey(themeKey);
   const role = authUser ? getRoleForEmail(authUser.email) : null;
+  const shoutSectionSize = theme.shout ? "18px" : "15px";
+  const shoutButtonSize = theme.shout ? "20px" : "16px";
+  const shoutTransform = theme.shout ? "uppercase" : "none";
 
   // Track login state
   useEffect(() => {
@@ -299,7 +302,7 @@ export default function App() {
 
   const inputStyle = {
     width: "100%", padding: "10px 12px", borderRadius: theme.radiusSm, border: `1.5px solid ${theme.inkSoft}33`,
-    background: theme.key === "dad" ? "#1B1919" : "#FBF9F5", color: theme.ink, fontFamily: theme.bodyFont, fontSize: "14px", outline: "none",
+    background: theme.dark ? "#1B1919" : "#FBF9F5", color: theme.ink, fontFamily: theme.bodyFont, fontSize: "14px", outline: "none",
   };
   const labelStyle = { fontSize: "12px", color: theme.inkSoft, fontWeight: 500, marginBottom: "5px", display: "block" };
 
@@ -346,11 +349,11 @@ export default function App() {
           </div>
           <h1 style={{
             fontFamily: theme.displayFont, fontSize: "30px", fontWeight: theme.displayWeight, marginTop: "2px",
-            letterSpacing: theme.displayLetterSpacing, fontStyle: theme.displayStyle,
-            background: `linear-gradient(120deg, ${theme.ink}, ${theme.accentDark})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent", WebkitTextFillColor: "transparent",
+            letterSpacing: theme.displayLetterSpacing, fontStyle: theme.displayStyle, color: theme.ink,
           }}>
             {theme.title}
           </h1>
+          <div style={{ width: "64px", height: "4px", borderRadius: "999px", marginTop: "6px", background: `linear-gradient(90deg, ${theme.accent}, ${theme.accentDark})` }} />
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "10px" }}>
             <div style={{ display: "flex", gap: theme.dividerStyle === "chain" ? "6px" : "4px" }}>
@@ -385,10 +388,10 @@ export default function App() {
           {showThemePicker && (
             <div style={{ marginTop: "10px", background: theme.card, borderRadius: theme.radiusSm, padding: "12px", boxShadow: theme.shadow }}>
               <div style={{ fontSize: "12px", color: theme.inkSoft, marginBottom: "8px" }}>Choose a look — anyone can switch this anytime</div>
-              <div className="flex gap-2">
-                {[MOM_THEME, DAD_THEME].map((t) => (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px" }}>
+                {ALL_THEMES.map((t) => (
                   <button key={t.key} onClick={() => chooseTheme(t.key)} style={{
-                    flex: 1, padding: "9px 0", borderRadius: theme.radiusSm, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "14px",
+                    padding: "9px 0", borderRadius: theme.radiusSm, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "14px",
                     border: themeKey === t.key ? `1.5px solid ${theme.accent}` : `1.5px solid ${theme.inkSoft}33`,
                     background: themeKey === t.key ? theme.accentBg : "transparent", color: themeKey === t.key ? theme.accent : theme.inkSoft, cursor: "pointer",
                   }}>{t.label}</button>
@@ -420,13 +423,13 @@ export default function App() {
                 )}
               </div>
               <button onClick={startSession} style={{
-                width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.key === "dad" ? "#161414" : "#FFFFFF", border: "none",
-                borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: theme.key === "dad" ? "20px" : "16px",
-                letterSpacing: theme.displayLetterSpacing, textTransform: theme.key === "dad" ? "uppercase" : "none",
+                width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.onAccent, border: "none",
+                borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize,
+                letterSpacing: theme.displayLetterSpacing, textTransform: shoutTransform,
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", cursor: "pointer",
                 boxShadow: `0 8px 20px -6px ${theme.accent}88`,
               }}>
-                <Play size={18} fill={theme.key === "dad" ? "#161414" : "#FFFFFF"} /> {theme.copy.startSession}
+                <Play size={18} fill={theme.onAccent} /> {theme.copy.startSession}
               </button>
             </>
           ) : (
@@ -447,12 +450,12 @@ export default function App() {
               </div>
               <div style={{ color: theme.inkSoft, fontSize: "13px", marginBottom: "18px" }}>Started {formatTime(active.startTime)}</div>
               <button onClick={endSession} style={{
-                width: "100%", background: theme.rust, color: "#FFFFFF", border: "none", borderRadius: theme.radiusSm, padding: "14px 0",
-                fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: theme.key === "dad" ? "20px" : "16px",
-                textTransform: theme.key === "dad" ? "uppercase" : "none", display: "flex", alignItems: "center",
+                width: "100%", background: theme.rust, color: theme.onRust, border: "none", borderRadius: theme.radiusSm, padding: "14px 0",
+                fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize,
+                textTransform: shoutTransform, display: "flex", alignItems: "center",
                 justifyContent: "center", gap: "8px", cursor: "pointer", boxShadow: `0 8px 20px -6px ${theme.rust}88`,
               }}>
-                <Square size={16} fill="#FFFFFF" /> {theme.copy.endSession}
+                <Square size={16} fill={theme.onRust} /> {theme.copy.endSession}
               </button>
             </>
           )}
@@ -461,7 +464,7 @@ export default function App() {
         {/* Progress */}
         <div style={{ background: theme.card, borderRadius: theme.radius, boxShadow: theme.shadow, padding: "22px", marginBottom: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: theme.key === "dad" ? "18px" : "15px", color: theme.ink, letterSpacing: theme.displayLetterSpacing }}>
+            <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutSectionSize, color: theme.ink, letterSpacing: theme.displayLetterSpacing }}>
               {theme.copy.totalHoursLabel}
             </div>
             <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "14px", color: theme.accentDark, fontWeight: 700 }}>
@@ -471,7 +474,7 @@ export default function App() {
           <ProgressBar value={totals.totalHours} goal={TOTAL_GOAL} color={theme.accent} locked={theme.locked} bg={theme.bg} ticks={[10, 25, 40]} />
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "18px" }}>
-            <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: theme.key === "dad" ? "18px" : "15px", color: theme.ink, display: "flex", alignItems: "center", gap: "6px", letterSpacing: theme.displayLetterSpacing }}>
+            <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutSectionSize, color: theme.ink, display: "flex", alignItems: "center", gap: "6px", letterSpacing: theme.displayLetterSpacing }}>
               <Moon size={14} color={theme.night} /> {theme.copy.nightHoursLabel}
             </div>
             <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "14px", color: theme.night, fontWeight: 700 }}>
@@ -485,7 +488,7 @@ export default function App() {
 
         {/* Milestone shelf */}
         <div style={{ marginBottom: "22px" }}>
-          <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: theme.key === "dad" ? "18px" : "15px", color: theme.ink, marginBottom: "10px", letterSpacing: theme.displayLetterSpacing }}>
+          <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutSectionSize, color: theme.ink, marginBottom: "10px", letterSpacing: theme.displayLetterSpacing }}>
             Milestones
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
@@ -503,7 +506,7 @@ export default function App() {
 
         {/* Log header */}
         <div className="flex items-center justify-between mb-3">
-          <button onClick={() => setShowLog((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: theme.ink, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: theme.key === "dad" ? "20px" : "16px", cursor: "pointer", padding: 0 }}>
+          <button onClick={() => setShowLog((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: theme.ink, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize, cursor: "pointer", padding: 0 }}>
             Session Log
             <ChevronDown size={16} color={theme.inkSoft} style={{ transform: showLog ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
           </button>
@@ -563,7 +566,7 @@ export default function App() {
       {!sheet && (
         <button onClick={openManual} style={{
           position: "fixed", bottom: "24px", right: "24px", width: "58px", height: "58px", borderRadius: "999px",
-          background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, border: "none", color: theme.key === "dad" ? "#161414" : "#FFF",
+          background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, border: "none", color: theme.onAccent,
           display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
           boxShadow: `0 10px 24px -6px ${theme.accent}88`, zIndex: 25,
         }}>
@@ -606,7 +609,7 @@ export default function App() {
             <div className="mb-5">
               <NightToggle value={manualForm.isNight} onChange={(v) => setManualForm((f) => ({ ...f, isNight: v }))} theme={theme} label="Night driving" />
             </div>
-            <button onClick={submitManual} style={{ width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.key === "dad" ? "#161414" : "#FFF", border: "none", borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+            <button onClick={submitManual} style={{ width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.onAccent, border: "none", borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
               <Check size={18} /> Add session
             </button>
           </div>
