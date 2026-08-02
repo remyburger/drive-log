@@ -2,9 +2,9 @@
 // with the exact email addresses you used. This is how the app knows whether
 // a logged-in person is Mom, Dad, or Amelie.
 export const ROLE_BY_EMAIL = {
-  "mom@example.com": "mom",
-  "dad@example.com": "dad",
-  "amelie@example.com": "amelie",
+  "a.gianella.burger@gmail.com": "mom",
+  "remy.burger@gmail.com": "dad",
+  "me@amelieburger.com": "amelie",
 };
 
 export const ROLE_LABELS = {
