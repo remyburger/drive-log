@@ -28,7 +28,7 @@ export default function Login({ theme }) {
     padding: "12px 14px",
     borderRadius: theme.radiusSm,
     border: `1.5px solid ${theme.inkSoft}33`,
-    background: theme.key === "dad" ? "#1B1919" : "#FBF9F5",
+    background: theme.dark ? "#1B1919" : "#FBF9F5",
     color: theme.ink,
     fontFamily: theme.bodyFont,
     fontSize: "15px",
@@ -81,7 +81,7 @@ export default function Login({ theme }) {
             disabled={submitting}
             style={{
               width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`,
-              color: theme.key === "dad" ? "#161414" : "#FFFFFF", border: "none", borderRadius: theme.radiusSm,
+              color: theme.onAccent, border: "none", borderRadius: theme.radiusSm,
               padding: "13px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "16px",
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
               cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
