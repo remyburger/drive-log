@@ -200,7 +200,6 @@ export default function App() {
       setActive(snap.exists() ? snap.data() : null);
       setActiveLoaded(true);
     }, (err) => { console.error("Active listener error", err); setActiveLoaded(true); });
-
     return () => { unsubSessions(); unsubActive(); };
   }, []);
 
@@ -404,7 +403,8 @@ export default function App() {
               <div className="mb-4"><CompanionToggle value={pendingCompanion} onChange={setPendingCompanion} /></div>
               <div className="mb-1">
                 <NightToggle value={pendingNight} onChange={(v) => { setPendingNight(v); setPendingNightAuto(false); }} />
-              </div>
+
+                </div>
               <div style={{ fontSize: "11px", color: COLORS.inkSoft, marginBottom: "18px", display: "flex", alignItems: "center", gap: "6px" }}>
                 {pendingNightAuto ? (
                   <>Following the clock — it's currently {formatTime(new Date(clockNow).toISOString())}</>
@@ -418,4 +418,192 @@ export default function App() {
                 )}
               </div>
               <button onClick={startSession} style={{
-                width: "100%", background: `linear-gradient(135deg, ${COLORS.sage}, ${COLORS.sageDark})`, color:
+                width: "100%", background: `linear-gradient(135deg, ${COLORS.sage}, ${COLORS.sageDark})`, color: "#FFFFFF", border: "none",
+                borderRadius: "14px", padding: "14px 0", fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "16px",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", cursor: "pointer",
+                boxShadow: "0 8px 20px -6px rgba(88,117,96,0.55)",
+              }}>
+                <Play size={18} fill="#FFFFFF" /> Start session
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <div style={{ color: COLORS.sage, fontSize: "12px", fontWeight: 600, letterSpacing: "0.08em" }}>● SESSION IN PROGRESS</div>
+                <div className="flex items-center gap-2">
+                  {active.isNight && (
+                    <div style={{ color: COLORS.blue, background: COLORS.blueBg, borderRadius: "999px", padding: "3px 8px", display: "flex", alignItems: "center" }}><Moon size={12} /></div>
+                  )}
+                  <div style={{ color: COMPANIONS[active.companion].color, background: COMPANIONS[active.companion].bg, fontFamily: "Space Grotesk, sans-serif", fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "999px" }}>
+                    {COMPANIONS[active.companion].label}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "42px", fontWeight: 700, color: COLORS.ink, fontVariantNumeric: "tabular-nums", margin: "8px 0 4px" }}>
+                {formatElapsed(now - new Date(active.startTime).getTime())}
+              </div>
+              <div style={{ color: COLORS.inkSoft, fontSize: "13px", marginBottom: "18px" }}>Started {formatTime(active.startTime)}</div>
+              <button onClick={endSession} style={{
+                width: "100%", background: COLORS.rust, color: "#FFFFFF", border: "none", borderRadius: "14px", padding: "14px 0",
+                fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "16px", display: "flex", alignItems: "center",
+                justifyContent: "center", gap: "8px", cursor: "pointer", boxShadow: "0 8px 20px -6px rgba(191,91,62,0.5)",
+              }}>
+                <Square size={16} fill="#FFFFFF" /> End session
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Progress */}
+        <div style={{ background: COLORS.card, borderRadius: "22px", boxShadow: SOFT_SHADOW, padding: "22px", marginBottom: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 600, fontSize: "15px", color: COLORS.ink }}>Total hours</div>
+            <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "14px", color: COLORS.sageDark, fontWeight: 700 }}>
+              {totals.totalHours.toFixed(1)} <span style={{ color: COLORS.inkSoft, fontWeight: 400 }}>/ {TOTAL_GOAL}h</span>
+            </div>
+          </div>
+          <ProgressBar value={totals.totalHours} goal={TOTAL_GOAL} color={COLORS.sage} ticks={[10, 25, 40]} />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "18px" }}>
+            <div style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 600, fontSize: "15px", color: COLORS.ink, display: "flex", alignItems: "center", gap: "6px" }}>
+              <Moon size={14} color={COLORS.blue} /> Night hours
+            </div>
+            <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "14px", color: COLORS.blue, fontWeight: 700 }}>
+              {totals.nightHours.toFixed(1)} <span style={{ color: COLORS.inkSoft, fontWeight: 400 }}>/ {NIGHT_GOAL}h</span>
+            </div>
+          </div>
+          <ProgressBar value={totals.nightHours} goal={NIGHT_GOAL} color={COLORS.blue} ticks={[5]} />
+
+          <div style={{ color: COLORS.inkSoft, fontSize: "13px", marginTop: "12px" }}>{encouragement(totalPct)}</div>
+        </div>
+
+        {/* Milestone shelf */}
+        <div style={{ marginBottom: "22px" }}>
+          <div style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 600, fontSize: "15px", color: COLORS.ink, marginBottom: "10px" }}>Milestones</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+            {MILESTONES.map((m) => {
+              const done = achieved.has(m.id);
+              return (
+                <div key={m.id} title={m.detail} style={{ background: done ? COLORS.goldBg : COLORS.locked, borderRadius: "14px", padding: "12px 6px", textAlign: "center", opacity: done ? 1 : 0.55, boxShadow: done ? "0 4px 12px -6px rgba(216,155,74,0.5)" : "none" }}>
+                  <div style={{ fontSize: "18px", marginBottom: "4px" }}>{m.icon}</div>
+                  <div style={{ fontSize: "10px", color: done ? COLORS.ink : COLORS.inkSoft, fontWeight: 500, lineHeight: 1.2 }}>{m.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Log header */}
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setShowLog((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: COLORS.ink, fontFamily: "Space Grotesk, sans-serif", fontWeight: 600, fontSize: "16px", cursor: "pointer", padding: 0 }}>
+            Session Log
+            <ChevronDown size={16} color={COLORS.inkSoft} style={{ transform: showLog ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
+          </button>
+          {sessions.length > 0 && (
+            <button onClick={exportCSV} style={{ display: "flex", alignItems: "center", gap: "6px", background: "transparent", border: `1px solid ${COLORS.gold}`, color: "#A87731", borderRadius: "10px", padding: "6px 12px", fontFamily: "Work Sans, sans-serif", fontWeight: 500, fontSize: "13px", cursor: "pointer" }}>
+              <Download size={14} /> Export CSV
+            </button>
+          )}
+        </div>
+
+        {showLog && (
+          sessions.length === 0 ? (
+            <div style={{ color: COLORS.inkSoft, fontSize: "14px", background: COLORS.card, borderRadius: "16px", padding: "24px 18px", textAlign: "center", border: "1px dashed " + COLORS.divider }}>
+              No sessions yet. Start one above, or tap + to add one manually.
+            </div>
+          ) : (
+            <div>
+              {dateKeys.map((date, idx) => (
+                <div key={date}>
+                  <div style={{ color: COLORS.inkSoft, fontFamily: "Space Grotesk, sans-serif", fontSize: "12px", letterSpacing: "0.04em", fontWeight: 500, margin: idx === 0 ? "0 0 8px" : "18px 0 8px", borderBottom: `1px dashed ${COLORS.divider}`, paddingBottom: "6px" }}>
+                    {formatDateLabel(date)}
+                  </div>
+                  {grouped[date].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => (
+                    <div key={s.id} style={{ background: COLORS.card, borderRadius: "14px", padding: "12px 14px", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 1px 2px rgba(43,42,39,0.04), 0 4px 12px -8px rgba(43,42,39,0.10)" }}>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => toggleNight(s.id)} title="Toggle night driving" style={{ width: "28px", height: "28px", borderRadius: "999px", border: "none", background: s.isNight ? COLORS.blueBg : COLORS.locked, color: s.isNight ? COLORS.blue : COLORS.inkSoft, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                          {s.isNight ? <Moon size={13} /> : <Sun size={13} />}
+                        </button>
+                        <div style={{ color: COMPANIONS[s.companion]?.color ?? COLORS.inkSoft, background: COMPANIONS[s.companion]?.bg ?? "transparent", fontFamily: "Space Grotesk, sans-serif", fontSize: "11px", fontWeight: 600, padding: "3px 9px", borderRadius: "999px", minWidth: "38px", textAlign: "center" }}>
+                          {COMPANIONS[s.companion]?.label ?? s.companion}
+                        </div>
+                        <div>
+                          <div style={{ color: COLORS.ink, fontSize: "14px" }}>{formatTime(s.startTime)} – {formatTime(s.endTime)}</div>
+                          <div style={{ color: COLORS.inkSoft, fontSize: "12px", fontFamily: "JetBrains Mono, monospace", display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
+                            <Clock size={11} /> {formatDuration(s.durationMinutes)}
+                          </div>
+                        </div>
+                      </div>
+                      {confirmDelete === s.id ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => deleteSession(s.id)} style={{ background: COLORS.rust, border: "none", color: "#FFF", fontSize: "11px", fontWeight: 600, borderRadius: "8px", padding: "5px 8px", cursor: "pointer" }}>Delete</button>
+                          <button onClick={() => setConfirmDelete(null)} style={{ background: "transparent", border: "none", color: COLORS.inkSoft, cursor: "pointer", padding: "5px" }}><X size={14} /></button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmDelete(s.id)} style={{ background: "transparent", border: "none", color: "#C7C1B2", cursor: "pointer", padding: "4px" }}><Trash2 size={15} /></button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Floating add button */}
+      {!sheet && (
+        <button onClick={openManual} style={{
+          position: "fixed", bottom: "24px", right: "24px", width: "58px", height: "58px", borderRadius: "999px",
+          background: `linear-gradient(135deg, ${COLORS.sage}, ${COLORS.sageDark})`, border: "none", color: "#FFF",
+          display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+          boxShadow: "0 10px 24px -6px rgba(88,117,96,0.55)", zIndex: 25,
+        }}>
+          <Plus size={26} />
+        </button>
+      )}
+
+      {/* Bottom sheet: manual add */}
+      {sheet === "manual" && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 40 }}>
+          <div onClick={closeSheet} style={{ position: "absolute", inset: 0, background: "rgba(43,42,39,0.45)" }} />
+          <div className="max-w-md mx-auto" style={{
+            position: "absolute", left: 0, right: 0, bottom: 0, background: COLORS.bg,
+            borderTopLeftRadius: "24px", borderTopRightRadius: "24px", padding: "20px 20px 28px",
+            maxHeight: "85vh", overflowY: "auto", boxShadow: "0 -12px 32px rgba(43,42,39,0.18)",
+          }}>
+            <div style={{ width: "36px", height: "4px", borderRadius: "999px", background: COLORS.divider, margin: "0 auto 18px" }} />
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={closeSheet} style={{ background: "none", border: "none", color: COLORS.inkSoft, cursor: "pointer", padding: "4px" }}><ArrowLeft size={18} /></button>
+              <div style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "18px", color: COLORS.ink }}>Add a session</div>
+            </div>
+            <div className="mb-3">
+              <label style={labelStyle}>Date</label>
+              <input type="date" value={manualForm.date} onChange={(e) => setManualForm((f) => ({ ...f, date: e.target.value }))} style={inputStyle} />
+            </div>
+            <div className="flex gap-3 mb-3">
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Start time</label>
+                <input type="time" value={manualForm.startTime} onChange={(e) => setManualForm((f) => ({ ...f, startTime: e.target.value, isNight: isNightFromHour(parseInt(e.target.value.split(":")[0], 10)) }))} style={inputStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>End time</label>
+                <input type="time" value={manualForm.endTime} onChange={(e) => setManualForm((f) => ({ ...f, endTime: e.target.value }))} style={inputStyle} />
+              </div>
+            </div>
+            <div className="mb-3">
+              <label style={labelStyle}>Who was along</label>
+              <CompanionToggle value={manualForm.companion} onChange={(v) => setManualForm((f) => ({ ...f, companion: v }))} />
+            </div>
+            <div className="mb-5">
+              <NightToggle value={manualForm.isNight} onChange={(v) => setManualForm((f) => ({ ...f, isNight: v }))} />
+            </div>
+            <button onClick={submitManual} style={{ width: "100%", background: `linear-gradient(135deg, ${COLORS.sage}, ${COLORS.sageDark})`, color: "#FFF", border: "none", borderRadius: "14px", padding: "14px 0", fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+              <Check size={18} /> Add session
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
