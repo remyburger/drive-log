@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Play, Square, Download, Clock, ChevronDown, X, Trash2, Moon, Sun,
-  Plus, Check, ArrowLeft, LogOut, Palette,
+  Plus, Check, ArrowLeft, LogOut, Palette, Car,
 } from "lucide-react";
-import { doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { getThemeByKey, loadThemePref, saveThemePref, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
+import { isNightAt } from "./sun";
 import Login from "./Login";
 
 const TOTAL_GOAL = 50;
 const NIGHT_GOAL = 10;
+const DAY_GOAL = TOTAL_GOAL - NIGHT_GOAL;
 
 const COMPANIONS = {
   mom: { label: "Mom", color: "#C98A93", bg: "rgba(201,138,147,0.15)" },
@@ -60,8 +62,7 @@ function formatTime(iso) {
 
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
-function isNightFromHour(h) { return h >= 20 || h < 6; }
-function defaultIsNight(date = new Date()) { return isNightFromHour(date.getHours()); }
+function defaultIsNight(date = new Date()) { return isNightAt(date); }
 function combineDateTime(dateStr, timeStr) { return new Date(`${dateStr}T${timeStr}:00`); }
 
 function computeTotals(sessions) {
@@ -85,14 +86,68 @@ function encouragement(pct) {
   return "Start your first session below.";
 }
 
-function ProgressBar({ value, goal, color, locked, ticks, bg }) {
-  const pct = Math.min(100, (value / goal) * 100);
+function ArcGauge({ theme, totalPct, nightPct }) {
+  const width = 180;
+  const height = 120;
+  const cx = width / 2;
+  const cy = 92;
+  const outerR = 68;
+  const innerR = 46;
+  const strokeW = 14;
+
+  const pointOnArc = (r, frac) => {
+    const angleDeg = 180 - frac * 180;
+    const angleRad = (angleDeg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(angleRad), y: cy - r * Math.sin(angleRad) };
+  };
+
+  const arcPath = (r, frac) => {
+    const start = pointOnArc(r, 0);
+    const end = pointOnArc(r, frac);
+    return `M ${start.x} ${start.y} A ${r} ${r} 0 0 1 ${end.x} ${end.y}`;
+  };
+
+  const outerFrac = Math.min(1, totalPct / 100);
+  const innerFrac = Math.min(1, nightPct / 100);
+  const outerTip = pointOnArc(outerR, outerFrac);
+  const innerTip = pointOnArc(innerR, innerFrac);
+
   return (
-    <div style={{ position: "relative", height: "10px", borderRadius: "999px", background: locked, marginTop: "10px", marginBottom: "6px" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: `${pct}%`, borderRadius: "999px", background: `linear-gradient(90deg, ${color}CC, ${color})`, transition: "width 0.4s ease" }} />
-      {ticks && ticks.map((t) => (
-        <div key={t} title={`${t}h`} style={{ position: "absolute", top: "-3px", left: `${(t / goal) * 100}%`, width: "3px", height: "16px", borderRadius: "2px", background: value >= t ? "#FFFFFF" : bg, opacity: 0.9, transform: "translateX(-1.5px)" }} />
-      ))}
+    <div style={{ position: "relative", width: `${width}px`, height: `${height}px`, flexShrink: 0 }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <path d={arcPath(outerR, 1)} fill="none" stroke={theme.locked} strokeWidth={strokeW} strokeLinecap="round" />
+        <path d={arcPath(innerR, 1)} fill="none" stroke={theme.locked} strokeWidth={strokeW} strokeLinecap="round" />
+        {outerFrac > 0 && <path d={arcPath(outerR, outerFrac)} fill="none" stroke={theme.accent} strokeWidth={strokeW} strokeLinecap="round" />}
+        {innerFrac > 0 && <path d={arcPath(innerR, innerFrac)} fill="none" stroke={theme.night} strokeWidth={strokeW} strokeLinecap="round" />}
+      </svg>
+      {outerFrac > 0.015 && (
+        <div style={{ position: "absolute", left: outerTip.x - 12, top: outerTip.y - 12, width: "24px", height: "24px", borderRadius: "999px", background: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: theme.shadow }}>
+          <Car size={12} color={theme.onAccent} />
+        </div>
+      )}
+      {innerFrac > 0.015 && (
+        <div style={{ position: "absolute", left: innerTip.x - 10, top: innerTip.y - 10, width: "20px", height: "20px", borderRadius: "999px", background: theme.night, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: theme.shadow }}>
+          <Moon size={10} color="#FFFFFF" />
+        </div>
+      )}
+      <div style={{ position: "absolute", left: 0, right: 0, top: `${cy - 34}px`, textAlign: "center" }}>
+        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "24px", fontWeight: 700, color: theme.ink }}>{Math.round(totalPct)}%</div>
+        <div style={{ fontSize: "10px", color: theme.inkSoft, marginTop: "2px", lineHeight: 1.2, padding: "0 8px" }}>Practice hours</div>
+      </div>
+    </div>
+  );
+}
+
+function StatRow({ icon, iconColor, value, goal, label, theme }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <div style={{ color: iconColor, flexShrink: 0 }}>{icon}</div>
+      <div>
+        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "18px", fontWeight: 700, color: theme.ink, lineHeight: 1.1 }}>
+          {value.toFixed(1)} <span style={{ fontSize: "12px", color: theme.inkSoft, fontWeight: 400 }}>/ {goal}</span>
+        </div>
+        <div style={{ fontSize: "11px", color: theme.inkSoft, marginTop: "2px" }}>{label}</div>
+      </div>
     </div>
   );
 }
@@ -181,6 +236,31 @@ export default function App() {
     }, (err) => { console.error("Active listener error", err); setActiveLoaded(true); });
 
     return () => { unsubSessions(); unsubActive(); };
+  }, []);
+
+  // Mobile browsers suspend background tabs, which can pause Firestore's
+  // real-time connection. Force a fresh fetch whenever the app comes back
+  // into view, so reopening it never shows stale data.
+  useEffect(() => {
+    const refreshOnFocus = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const snap = await getDoc(sessionsDocRef);
+        const list = snap.exists() ? snap.data().list || [] : [];
+        setSessions(list);
+        sessionsRef.current = list;
+      } catch (e) { console.error("Refresh (sessions) failed", e); }
+      try {
+        const snap = await getDoc(activeDocRef);
+        setActive(snap.exists() ? snap.data() : null);
+      } catch (e) { console.error("Refresh (active) failed", e); }
+    };
+    document.addEventListener("visibilitychange", refreshOnFocus);
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -275,7 +355,7 @@ export default function App() {
   };
 
   const openManual = () => {
-    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: (role === "mom" || role === "dad") ? role : "mom", isNight: isNightFromHour(16) });
+    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: (role === "mom" || role === "dad") ? role : "mom", isNight: isNightAt(combineDateTime(todayStr(), "16:00")) });
     setSheet("manual");
   };
 
@@ -365,24 +445,25 @@ export default function App() {
                     <div key={i} style={{ width: "4px", height: "4px", borderRadius: "999px", background: i % 3 === 0 ? theme.gold : theme.divider }} />
                   ))}
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowThemePicker((v) => !v)} style={{
-                display: "flex", alignItems: "center", gap: "5px", background: theme.card, border: `1px solid ${theme.inkSoft}22`,
-                borderRadius: "999px", padding: "5px 10px", cursor: "pointer", boxShadow: theme.shadow, color: theme.inkSoft, fontSize: "11px", fontWeight: 500,
-              }}>
-                <Palette size={13} /> {theme.label}
-              </button>
-              <button onClick={() => signOut(auth)} title="Sign out" style={{
-                display: "flex", alignItems: "center", gap: "4px", background: "transparent", border: "none",
-                color: theme.inkSoft, fontSize: "11px", cursor: "pointer", padding: "5px",
-              }}>
-                <LogOut size={13} />
-              </button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowThemePicker((v) => !v)} style={{
+                  display: "flex", alignItems: "center", gap: "5px", background: theme.card, border: `1px solid ${theme.inkSoft}22`,
+                  borderRadius: "999px", padding: "5px 10px", cursor: "pointer", boxShadow: theme.shadow, color: theme.inkSoft, fontSize: "11px", fontWeight: 500,
+                }}>
+                  <Palette size={13} /> {theme.label}
+                </button>
+                <button onClick={() => signOut(auth)} title="Sign out" style={{
+                  display: "flex", alignItems: "center", gap: "4px", background: "transparent", border: "none",
+                  color: theme.inkSoft, fontSize: "11px", cursor: "pointer", padding: "5px",
+                }}>
+                  <LogOut size={13} />
+                </button>
+              </div>
+              <div style={{ fontSize: "11px", color: theme.inkSoft, paddingRight: "2px" }}>
+                Signed in as {ROLE_LABELS[role] || authUser.email}
+              </div>
             </div>
-          </div>
-
-          <div style={{ marginTop: "6px", fontSize: "11px", color: theme.inkSoft }}>
-            Signed in as {ROLE_LABELS[role] || authUser.email}
           </div>
 
           {showThemePicker && (
@@ -412,7 +493,7 @@ export default function App() {
               </div>
               <div style={{ fontSize: "11px", color: theme.inkSoft, marginBottom: "18px", display: "flex", alignItems: "center", gap: "6px" }}>
                 {pendingNightAuto ? (
-                  <>Following the clock — it's currently {formatTime(new Date(clockNow).toISOString())}</>
+                  <>Following sunset in Boulder — it's currently {formatTime(new Date(clockNow).toISOString())}</>
                 ) : (
                   <>
                     Set manually.
@@ -463,27 +544,16 @@ export default function App() {
 
         {/* Progress */}
         <div style={{ background: theme.card, borderRadius: theme.radius, boxShadow: theme.shadow, padding: "22px", marginBottom: "20px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutSectionSize, color: theme.ink, letterSpacing: theme.displayLetterSpacing }}>
-              {theme.copy.totalHoursLabel}
-            </div>
-            <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "14px", color: theme.accentDark, fontWeight: 700 }}>
-              {totals.totalHours.toFixed(1)} <span style={{ color: theme.inkSoft, fontWeight: 400 }}>/ {TOTAL_GOAL}h</span>
-            </div>
-          </div>
-          <ProgressBar value={totals.totalHours} goal={TOTAL_GOAL} color={theme.accent} locked={theme.locked} bg={theme.bg} ticks={[10, 25, 40]} />
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "18px" }}>
-            <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutSectionSize, color: theme.ink, display: "flex", alignItems: "center", gap: "6px", letterSpacing: theme.displayLetterSpacing }}>
-              <Moon size={14} color={theme.night} /> {theme.copy.nightHoursLabel}
-            </div>
-            <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "14px", color: theme.night, fontWeight: 700 }}>
-              {totals.nightHours.toFixed(1)} <span style={{ color: theme.inkSoft, fontWeight: 400 }}>/ {NIGHT_GOAL}h</span>
+          <div className="flex items-center gap-4">
+            <ArcGauge theme={theme} totalPct={totalPct} nightPct={Math.min(100, (totals.nightHours / NIGHT_GOAL) * 100)} />
+            <div className="flex-1 flex flex-col gap-4">
+              <StatRow icon={<Car size={16} />} iconColor={theme.accent} value={totals.totalHours} goal={TOTAL_GOAL} label={theme.copy.totalHoursLabel} theme={theme} />
+              <StatRow icon={<Sun size={16} />} iconColor={theme.gold} value={totals.totalHours - totals.nightHours} goal={DAY_GOAL} label={theme.copy.dayHoursLabel} theme={theme} />
+              <StatRow icon={<Moon size={16} />} iconColor={theme.night} value={totals.nightHours} goal={NIGHT_GOAL} label={theme.copy.nightHoursLabel} theme={theme} />
             </div>
           </div>
-          <ProgressBar value={totals.nightHours} goal={NIGHT_GOAL} color={theme.night} locked={theme.locked} bg={theme.bg} ticks={[5]} />
 
-          <div style={{ color: theme.inkSoft, fontSize: "13px", marginTop: "12px" }}>{encouragement(totalPct)}</div>
+          <div style={{ color: theme.inkSoft, fontSize: "13px", marginTop: "18px" }}>{encouragement(totalPct)}</div>
         </div>
 
         {/* Milestone shelf */}
@@ -595,7 +665,7 @@ export default function App() {
             <div className="flex gap-3 mb-3">
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Start time</label>
-                <input type="time" value={manualForm.startTime} onChange={(e) => setManualForm((f) => ({ ...f, startTime: e.target.value, isNight: isNightFromHour(parseInt(e.target.value.split(":")[0], 10)) }))} style={inputStyle} />
+                <input type="time" value={manualForm.startTime} onChange={(e) => setManualForm((f) => ({ ...f, startTime: e.target.value, isNight: isNightAt(combineDateTime(f.date, e.target.value)) }))} style={inputStyle} />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>End time</label>

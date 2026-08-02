@@ -50,6 +50,7 @@ export const MOM_THEME = {
     endSession: "End session",
     totalHoursLabel: "Total hours",
     nightHoursLabel: "Night hours",
+    dayHoursLabel: "Day hours",
   },
 };
 
@@ -95,6 +96,7 @@ export const DAD_THEME = {
     endSession: "End the ride",
     totalHoursLabel: "Miles on the clock",
     nightHoursLabel: "Night run",
+    dayHoursLabel: "Day miles",
   },
 };
 
@@ -140,6 +142,7 @@ export const NEON_THEME = {
     endSession: "Game over",
     totalHoursLabel: "XP earned",
     nightHoursLabel: "Night mode XP",
+    dayHoursLabel: "Day mode XP",
   },
 };
 
@@ -185,6 +188,7 @@ export const KAWAII_THEME = {
     endSession: "We made it! 🎀",
     totalHoursLabel: "Hours of sparkle",
     nightHoursLabel: "Starlight hours",
+    dayHoursLabel: "Daylight hours",
   },
 };
 
@@ -230,6 +234,7 @@ export const RETRO_THEME = {
     endSession: "Pull over",
     totalHoursLabel: "Total hours",
     nightHoursLabel: "Night hours",
+    dayHoursLabel: "Day hours",
   },
 };
 
@@ -275,6 +280,7 @@ export const MONO_THEME = {
     endSession: "End session",
     totalHoursLabel: "Total hours",
     nightHoursLabel: "Night hours",
+    dayHoursLabel: "Day hours",
   },
 };
 
