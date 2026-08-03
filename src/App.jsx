@@ -32,6 +32,7 @@ const MILESTONES = [
 
 const sessionsDocRef = doc(db, "drivelog", "sessions");
 const activeDocRef = doc(db, "drivelog", "active");
+const themePrefDocRef = doc(db, "drivelog", "themePref");
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
@@ -221,7 +222,15 @@ export default function App() {
       setActiveLoaded(true);
     }, (err) => { console.error("Active listener error", err); setActiveLoaded(true); });
 
-    return () => { unsubSessions(); unsubActive(); };
+    const unsubTheme = onSnapshot(themePrefDocRef, (snap) => {
+      const key = snap.exists() ? snap.data().key : null;
+      if (key) {
+        setThemeKey(key);
+        saveThemePref(key); // keep local cache in sync for instant load next time
+      }
+    }, (err) => console.error("Theme pref listener error", err));
+
+    return () => { unsubSessions(); unsubActive(); unsubTheme(); };
   }, []);
 
   // Mobile browsers suspend background tabs, which can pause Firestore's
@@ -240,6 +249,11 @@ export default function App() {
         const snap = await getDoc(activeDocRef);
         setActive(snap.exists() ? snap.data() : null);
       } catch (e) { console.error("Refresh (active) failed", e); }
+      try {
+        const snap = await getDoc(themePrefDocRef);
+        const key = snap.exists() ? snap.data().key : null;
+        if (key) { setThemeKey(key); saveThemePref(key); }
+      } catch (e) { console.error("Refresh (theme pref) failed", e); }
     };
     document.addEventListener("visibilitychange", refreshOnFocus);
     window.addEventListener("focus", refreshOnFocus);
@@ -262,6 +276,7 @@ export default function App() {
     setThemeKey(key);
     saveThemePref(key);
     setShowThemePicker(false);
+    setDoc(themePrefDocRef, { key }).catch((e) => console.error("Failed to save theme pref", e));
   };
 
   const persistSessions = useCallback(async (next) => {
