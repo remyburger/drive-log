@@ -50,3 +50,7 @@ export function nightMinutesForSession(startInput, endInput) {
   return totalNightMs / 60000;
 }
 
+export function getTodaySunTimes() {
+  return SunCalc.getTimes(new Date(), LOCATION_LAT, LOCATION_LON);
+}
+

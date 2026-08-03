@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Play, Square, Download, Clock, ChevronDown, X, Trash2, Moon, Sun,
-  Plus, Check, ArrowLeft, LogOut, Palette, Car,
+  Plus, Check, ArrowLeft, LogOut, Palette, Car, Pencil,
 } from "lucide-react";
 import { doc, onSnapshot, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { getThemeByKey, loadThemePref, saveThemePref, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
-import { isNightAt, nightMinutesForSession } from "./sun";
+import { isNightAt, nightMinutesForSession, getTodaySunTimes } from "./sun";
 import Login from "./Login";
 
 const TOTAL_GOAL = 50;
@@ -63,6 +63,7 @@ function formatTime(iso) {
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
 function toLocalDateStr(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
 function todayStr() { return toLocalDateStr(new Date()); }
+function toLocalTimeStr(iso) { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function combineDateTime(dateStr, timeStr) { return new Date(`${dateStr}T${timeStr}:00`); }
 
 function computeTotals(sessions) {
@@ -188,6 +189,7 @@ export default function App() {
 
   const [sheet, setSheet] = useState(null);
   const [manualForm, setManualForm] = useState({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: "mom" });
+  const [editingId, setEditingId] = useState(null);
 
   const theme = getThemeByKey(themeKey);
   const role = authUser ? getRoleForEmail(authUser.email) : null;
@@ -329,7 +331,14 @@ export default function App() {
   };
 
   const openManual = () => {
+    setEditingId(null);
     setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: (role === "mom" || role === "dad") ? role : "mom" });
+    setSheet("manual");
+  };
+
+  const editSession = (s) => {
+    setEditingId(s.id);
+    setManualForm({ date: s.date, startTime: toLocalTimeStr(s.startTime), endTime: toLocalTimeStr(s.endTime), companion: s.companion });
     setSheet("manual");
   };
 
@@ -339,16 +348,28 @@ export default function App() {
     if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
     const durationMinutes = (end - start) / 60000;
     const nightMinutes = nightMinutesForSession(start.toISOString(), end.toISOString());
-    addManualSessions([{
+    const record = {
       date: manualForm.date, startTime: start.toISOString(), endTime: end.toISOString(),
       durationMinutes, companion: manualForm.companion, nightMinutes,
-    }]);
+    };
+
+    if (editingId) {
+      const next = sessionsRef.current.map((s) => (s.id === editingId ? { ...record, id: editingId } : s));
+      fireMilestoneCheck(sessionsRef.current, next);
+      persistSessions(next);
+    } else {
+      addManualSessions([record]);
+    }
+
+    setEditingId(null);
     setSheet(null);
   };
 
-  const closeSheet = () => setSheet(null);
+  const closeSheet = () => { setSheet(null); setEditingId(null); };
 
   const totals = computeTotals(sessions);
+  const todaySunTimes = getTodaySunTimes();
+  const sunsetStr = todaySunTimes.sunset.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const achieved = achievedSet(totals);
   const totalPct = Math.min(100, (totals.totalHours / TOTAL_GOAL) * 100);
 
@@ -455,6 +476,10 @@ export default function App() {
               </div>
             </div>
           )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.inkSoft, marginBottom: "10px" }}>
+          <Moon size={12} color={theme.night} /> Sunset today in Boulder: {sunsetStr} — night driving counts after that
         </div>
 
         {/* Hero session card */}
@@ -581,7 +606,10 @@ export default function App() {
                           <button onClick={() => setConfirmDelete(null)} style={{ background: "transparent", border: "none", color: theme.inkSoft, cursor: "pointer", padding: "5px" }}><X size={14} /></button>
                         </div>
                       ) : (
-                        <button onClick={() => setConfirmDelete(s.id)} style={{ background: "transparent", border: "none", color: theme.inkSoft, cursor: "pointer", padding: "4px", opacity: 0.6 }}><Trash2 size={15} /></button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => editSession(s)} style={{ background: "transparent", border: "none", color: theme.inkSoft, cursor: "pointer", padding: "4px", opacity: 0.6 }}><Pencil size={15} /></button>
+                          <button onClick={() => setConfirmDelete(s.id)} style={{ background: "transparent", border: "none", color: theme.inkSoft, cursor: "pointer", padding: "4px", opacity: 0.6 }}><Trash2 size={15} /></button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -616,7 +644,7 @@ export default function App() {
             <div style={{ width: "36px", height: "4px", borderRadius: "999px", background: theme.divider, margin: "0 auto 18px" }} />
             <div className="flex items-center gap-2 mb-4">
               <button onClick={closeSheet} style={{ background: "none", border: "none", color: theme.inkSoft, cursor: "pointer", padding: "4px" }}><ArrowLeft size={18} /></button>
-              <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "18px", color: theme.ink }}>Add a session</div>
+              <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "18px", color: theme.ink }}>{editingId ? "Edit session" : "Add a session"}</div>
             </div>
             <div className="mb-3">
               <label style={labelStyle}>Date</label>
@@ -640,7 +668,7 @@ export default function App() {
               Night-driving minutes are calculated automatically from actual sunset/sunrise times.
             </div>
             <button onClick={submitManual} style={{ width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.onAccent, border: "none", borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-              <Check size={18} /> Add session
+              <Check size={18} /> {editingId ? "Save changes" : "Add session"}
             </button>
           </div>
         </div>
