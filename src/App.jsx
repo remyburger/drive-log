@@ -597,6 +597,11 @@ export default function App() {
                           <div style={{ color: theme.ink, fontSize: "14px" }}>{formatTime(s.startTime)} – {formatTime(s.endTime)}</div>
                           <div style={{ color: theme.inkSoft, fontSize: "12px", fontFamily: "JetBrains Mono, monospace", display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
                             <Clock size={11} /> {formatDuration(s.durationMinutes)}
+                            {sessionNightMin > 0 && (
+                              <span style={{ color: theme.night, display: "flex", alignItems: "center", gap: "3px", marginLeft: "2px" }}>
+                                · <Moon size={10} /> {Math.round(sessionNightMin)} min
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
