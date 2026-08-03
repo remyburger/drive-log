@@ -68,7 +68,7 @@ function combineDateTime(dateStr, timeStr) { return new Date(`${dateStr}T${timeS
 
 function computeTotals(sessions) {
   const totalMinutes = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
-  const nightMinutes = sessions.reduce((sum, s) => sum + (s.nightMinutes || 0), 0);
+  const nightMinutes = sessions.reduce((sum, s) => sum + nightMinutesForSession(s.startTime, s.endTime), 0);
   return { totalHours: totalMinutes / 60, nightHours: nightMinutes / 60, sessionCount: sessions.length };
 }
 
@@ -298,8 +298,7 @@ export default function App() {
     if (!active) return;
     const endTime = new Date().toISOString();
     const durationMinutes = (new Date(endTime) - new Date(active.startTime)) / 60000;
-    const nightMinutes = nightMinutesForSession(active.startTime, endTime);
-    const record = { ...active, endTime, durationMinutes, nightMinutes };
+    const record = { ...active, endTime, durationMinutes };
     const next = [record, ...sessionsRef.current];
     fireMilestoneCheck(sessionsRef.current, next);
     persistSessions(next);
@@ -319,7 +318,7 @@ export default function App() {
     const header = ["Date", "Start Time", "End Time", "Duration (min)", "Companion", "Night Driving (min)"];
     const rows = [...sessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).map((s) => [
       s.date, formatTime(s.startTime), formatTime(s.endTime), Math.round(s.durationMinutes),
-      COMPANIONS[s.companion]?.label ?? s.companion, Math.round(s.nightMinutes || 0),
+      COMPANIONS[s.companion]?.label ?? s.companion, Math.round(nightMinutesForSession(s.startTime, s.endTime)),
     ]);
     const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -347,10 +346,9 @@ export default function App() {
     let end = combineDateTime(manualForm.date, manualForm.endTime);
     if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
     const durationMinutes = (end - start) / 60000;
-    const nightMinutes = nightMinutesForSession(start.toISOString(), end.toISOString());
     const record = {
       date: manualForm.date, startTime: start.toISOString(), endTime: end.toISOString(),
-      durationMinutes, companion: manualForm.companion, nightMinutes,
+      durationMinutes, companion: manualForm.companion,
     };
 
     if (editingId) {
@@ -479,7 +477,7 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.inkSoft, marginBottom: "10px" }}>
-          <Moon size={12} color={theme.night} /> Sunset today in Boulder: {sunsetStr} — night driving counts after that
+          <Moon size={12} color={theme.night} /> Sunset today in Boulder: {sunsetStr}
         </div>
 
         {/* Hero session card */}
@@ -584,11 +582,13 @@ export default function App() {
                   <div style={{ color: theme.inkSoft, fontFamily: theme.displayFont, fontSize: "12px", letterSpacing: "0.04em", fontWeight: 500, margin: idx === 0 ? "0 0 8px" : "18px 0 8px", borderBottom: `1px dashed ${theme.divider}`, paddingBottom: "6px" }}>
                     {formatDateLabel(date)}
                   </div>
-                  {grouped[date].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => (
+                  {grouped[date].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => {
+                    const sessionNightMin = nightMinutesForSession(s.startTime, s.endTime);
+                    return (
                     <div key={s.id} style={{ background: theme.card, borderRadius: theme.radiusSm, padding: "12px 14px", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: theme.shadow }}>
                       <div className="flex items-center gap-3">
-                        <div title={s.nightMinutes > 0 ? `${Math.round(s.nightMinutes)} min after dark` : "All daylight"} style={{ width: "28px", height: "28px", borderRadius: "999px", background: s.nightMinutes > 0 ? theme.nightBg : theme.locked, color: s.nightMinutes > 0 ? theme.night : theme.inkSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          {s.nightMinutes > 0 ? <Moon size={13} /> : <Sun size={13} />}
+                        <div title={sessionNightMin > 0 ? `${Math.round(sessionNightMin)} min after dark` : "All daylight"} style={{ width: "28px", height: "28px", borderRadius: "999px", background: sessionNightMin > 0 ? theme.nightBg : theme.locked, color: sessionNightMin > 0 ? theme.night : theme.inkSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {sessionNightMin > 0 ? <Moon size={13} /> : <Sun size={13} />}
                         </div>
                         <div style={{ color: COMPANIONS[s.companion]?.color ?? theme.inkSoft, background: COMPANIONS[s.companion]?.bg ?? "transparent", fontFamily: theme.displayFont, fontSize: "11px", fontWeight: 600, padding: "3px 9px", borderRadius: "999px", minWidth: "38px", textAlign: "center" }}>
                           {COMPANIONS[s.companion]?.label ?? s.companion}
@@ -612,7 +612,7 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  );})}
                 </div>
               ))}
             </div>
