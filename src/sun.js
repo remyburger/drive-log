@@ -36,7 +36,12 @@ export function nightMinutesForSession(startInput, endInput) {
     const segEnd = Math.min(end.getTime(), dayEnd);
 
     if (segEnd > segStart) {
-      const times = SunCalc.getTimes(dayCursor, LOCATION_LAT, LOCATION_LON);
+      // Query suncalc at local NOON of this day, not midnight — midnight sits
+      // right on suncalc's internal day-rounding boundary and can silently
+      // return the *previous* day's sunrise/sunset instead. Noon is always
+      // unambiguous.
+      const noonOfDay = new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate(), 12, 0, 0);
+      const times = SunCalc.getTimes(noonOfDay, LOCATION_LAT, LOCATION_LON);
       const sunrise = times.sunrise.getTime();
       const sunset = times.sunset.getTime();
 
@@ -51,6 +56,8 @@ export function nightMinutesForSession(startInput, endInput) {
 }
 
 export function getTodaySunTimes() {
-  return SunCalc.getTimes(new Date(), LOCATION_LAT, LOCATION_LON);
+  const now = new Date();
+  const noonToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+  return SunCalc.getTimes(noonToday, LOCATION_LAT, LOCATION_LON);
 }
 
