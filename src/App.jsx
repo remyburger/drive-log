@@ -6,7 +6,7 @@ import {
 import { doc, onSnapshot, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
-import { getThemeByKey, loadThemePref, saveThemePref, ALL_THEMES } from "./theme";
+import { getThemeByKey, loadThemePref, saveThemePref, loadThemePrefForRole, saveThemePrefForRole, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
 import { isNightAt, nightMinutesForSession, getTodaySunTimes } from "./sun";
 import Login from "./Login";
@@ -32,7 +32,7 @@ const MILESTONES = [
 
 const sessionsDocRef = doc(db, "drivelog", "sessions");
 const activeDocRef = doc(db, "drivelog", "active");
-const themePrefDocRef = doc(db, "drivelog", "themePref");
+const themePrefsDocRef = doc(db, "drivelog", "themePrefs"); // { mom: "kawaii", dad: "dad", amelie: "neon" }
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
@@ -222,16 +222,25 @@ export default function App() {
       setActiveLoaded(true);
     }, (err) => { console.error("Active listener error", err); setActiveLoaded(true); });
 
-    const unsubTheme = onSnapshot(themePrefDocRef, (snap) => {
-      const key = snap.exists() ? snap.data().key : null;
+    return () => { unsubSessions(); unsubActive(); };
+  }, []);
+
+  // Per-person theme preference: follows whoever is logged in, on any device.
+  useEffect(() => {
+    if (!role) return;
+    const cached = loadThemePrefForRole(role);
+    if (cached) setThemeKey(cached);
+
+    const unsub = onSnapshot(themePrefsDocRef, (snap) => {
+      const key = snap.exists() ? snap.data()[role] : null;
       if (key) {
         setThemeKey(key);
-        saveThemePref(key); // keep local cache in sync for instant load next time
+        saveThemePrefForRole(role, key);
       }
     }, (err) => console.error("Theme pref listener error", err));
 
-    return () => { unsubSessions(); unsubActive(); unsubTheme(); };
-  }, []);
+    return () => unsub();
+  }, [role]);
 
   // Mobile browsers suspend background tabs, which can pause Firestore's
   // real-time connection. Force a fresh fetch whenever the app comes back
@@ -250,9 +259,9 @@ export default function App() {
         setActive(snap.exists() ? snap.data() : null);
       } catch (e) { console.error("Refresh (active) failed", e); }
       try {
-        const snap = await getDoc(themePrefDocRef);
-        const key = snap.exists() ? snap.data().key : null;
-        if (key) { setThemeKey(key); saveThemePref(key); }
+        const snap = await getDoc(themePrefsDocRef);
+        const key = role && snap.exists() ? snap.data()[role] : null;
+        if (key) { setThemeKey(key); saveThemePrefForRole(role, key); }
       } catch (e) { console.error("Refresh (theme pref) failed", e); }
     };
     document.addEventListener("visibilitychange", refreshOnFocus);
@@ -261,7 +270,7 @@ export default function App() {
       document.removeEventListener("visibilitychange", refreshOnFocus);
       window.removeEventListener("focus", refreshOnFocus);
     };
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     if (active) {
@@ -274,9 +283,13 @@ export default function App() {
 
   const chooseTheme = (key) => {
     setThemeKey(key);
-    saveThemePref(key);
     setShowThemePicker(false);
-    setDoc(themePrefDocRef, { key }).catch((e) => console.error("Failed to save theme pref", e));
+    if (role) {
+      saveThemePrefForRole(role, key);
+      setDoc(themePrefsDocRef, { [role]: key }, { merge: true }).catch((e) => console.error("Failed to save theme pref", e));
+    } else {
+      saveThemePref(key); // no role yet (shouldn't normally happen) — fall back to device cache
+    }
   };
 
   const persistSessions = useCallback(async (next) => {

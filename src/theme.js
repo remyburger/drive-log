@@ -292,6 +292,8 @@ export function getThemeByKey(key) {
   return THEME_BY_KEY[key] || MOM_THEME;
 }
 
+// Generic fallback used only before login resolves, to avoid a flash of the
+// default theme while we're still figuring out who's signed in.
 export function loadThemePref() {
   try {
     const stored = window.localStorage.getItem(THEME_PREF_KEY);
@@ -308,3 +310,24 @@ export function saveThemePref(key) {
     /* ignore */
   }
 }
+
+// Per-person theme preference, so it follows whoever is logged in regardless
+// of which device they're on. Firestore is the source of truth (see App.jsx);
+// this local cache is just a fast fallback for instant load on this device.
+export function loadThemePrefForRole(role) {
+  try {
+    const stored = window.localStorage.getItem(`${THEME_PREF_KEY}:${role}`);
+    return THEME_BY_KEY[stored] ? stored : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function saveThemePrefForRole(role, key) {
+  try {
+    window.localStorage.setItem(`${THEME_PREF_KEY}:${role}`, key);
+  } catch (e) {
+    /* ignore */
+  }
+}
+
