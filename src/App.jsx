@@ -8,7 +8,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
 import { getThemeByKey, loadThemePref, saveThemePref, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
-import { isNightAt } from "./sun";
+import { isNightAt, nightMinutesForSession } from "./sun";
 import Login from "./Login";
 
 const TOTAL_GOAL = 50;
@@ -61,13 +61,13 @@ function formatTime(iso) {
 }
 
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function defaultIsNight(date = new Date()) { return isNightAt(date); }
+function toLocalDateStr(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
+function todayStr() { return toLocalDateStr(new Date()); }
 function combineDateTime(dateStr, timeStr) { return new Date(`${dateStr}T${timeStr}:00`); }
 
 function computeTotals(sessions) {
   const totalMinutes = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
-  const nightMinutes = sessions.filter((s) => s.isNight).reduce((sum, s) => sum + s.durationMinutes, 0);
+  const nightMinutes = sessions.reduce((sum, s) => sum + (s.nightMinutes || 0), 0);
   return { totalHours: totalMinutes / 60, nightHours: nightMinutes / 60, sessionCount: sessions.length };
 }
 
@@ -168,19 +168,6 @@ function CompanionToggle({ value, onChange, theme, size = "md" }) {
   );
 }
 
-function NightToggle({ value, onChange, theme, label }) {
-  return (
-    <button type="button" onClick={() => onChange(!value)} style={{
-      width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", borderRadius: theme.radiusSm,
-      border: value ? `1.5px solid ${theme.night}` : `1.5px solid ${theme.inkSoft}33`,
-      background: value ? theme.nightBg : "transparent", color: value ? theme.night : theme.inkSoft,
-      fontFamily: theme.bodyFont, fontWeight: 500, fontSize: "14px", cursor: "pointer",
-    }}>
-      {value ? <Moon size={16} /> : <Sun size={16} />} {label} {value ? "— on" : "— off"}
-    </button>
-  );
-}
-
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined); // undefined = still checking, null = signed out
   const [themeKey, setThemeKey] = useState(loadThemePref());
@@ -189,9 +176,6 @@ export default function App() {
   const [sessions, setSessions] = useState([]);
   const [active, setActive] = useState(null);
   const [pendingCompanion, setPendingCompanion] = useState("mom");
-  const [pendingNight, setPendingNight] = useState(defaultIsNight());
-  const [pendingNightAuto, setPendingNightAuto] = useState(true);
-  const [clockNow, setClockNow] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [activeLoaded, setActiveLoaded] = useState(false);
@@ -203,7 +187,7 @@ export default function App() {
   const sessionsRef = useRef([]);
 
   const [sheet, setSheet] = useState(null);
-  const [manualForm, setManualForm] = useState({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: "mom", isNight: false });
+  const [manualForm, setManualForm] = useState({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: "mom" });
 
   const theme = getThemeByKey(themeKey);
   const role = authUser ? getRoleForEmail(authUser.email) : null;
@@ -270,15 +254,6 @@ export default function App() {
     }
   }, [active]);
 
-  useEffect(() => {
-    const interval = setInterval(() => setClockNow(Date.now()), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (pendingNightAuto) setPendingNight(defaultIsNight(new Date(clockNow)));
-  }, [clockNow, pendingNightAuto]);
-
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
 
   const chooseTheme = (key) => {
@@ -313,16 +288,16 @@ export default function App() {
   };
 
   const startSession = () => {
-    const startTime = new Date().toISOString();
-    persistActive({ id: uid(), date: startTime.slice(0, 10), startTime, companion: pendingCompanion, isNight: pendingNight });
-    setPendingNightAuto(true);
+    const now = new Date();
+    persistActive({ id: uid(), date: toLocalDateStr(now), startTime: now.toISOString(), companion: pendingCompanion });
   };
 
   const endSession = () => {
     if (!active) return;
     const endTime = new Date().toISOString();
     const durationMinutes = (new Date(endTime) - new Date(active.startTime)) / 60000;
-    const record = { ...active, endTime, durationMinutes };
+    const nightMinutes = nightMinutesForSession(active.startTime, endTime);
+    const record = { ...active, endTime, durationMinutes, nightMinutes };
     const next = [record, ...sessionsRef.current];
     fireMilestoneCheck(sessionsRef.current, next);
     persistSessions(next);
@@ -337,13 +312,12 @@ export default function App() {
   };
 
   const deleteSession = (id) => { persistSessions(sessionsRef.current.filter((s) => s.id !== id)); setConfirmDelete(null); };
-  const toggleNight = (id) => persistSessions(sessionsRef.current.map((s) => (s.id === id ? { ...s, isNight: !s.isNight } : s)));
 
   const exportCSV = () => {
-    const header = ["Date", "Start Time", "End Time", "Duration (min)", "Companion", "Night Driving"];
+    const header = ["Date", "Start Time", "End Time", "Duration (min)", "Companion", "Night Driving (min)"];
     const rows = [...sessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).map((s) => [
       s.date, formatTime(s.startTime), formatTime(s.endTime), Math.round(s.durationMinutes),
-      COMPANIONS[s.companion]?.label ?? s.companion, s.isNight ? "Yes" : "No",
+      COMPANIONS[s.companion]?.label ?? s.companion, Math.round(s.nightMinutes || 0),
     ]);
     const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -355,7 +329,7 @@ export default function App() {
   };
 
   const openManual = () => {
-    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: (role === "mom" || role === "dad") ? role : "mom", isNight: isNightAt(combineDateTime(todayStr(), "16:00")) });
+    setManualForm({ date: todayStr(), startTime: "16:00", endTime: "16:30", companion: (role === "mom" || role === "dad") ? role : "mom" });
     setSheet("manual");
   };
 
@@ -364,9 +338,10 @@ export default function App() {
     let end = combineDateTime(manualForm.date, manualForm.endTime);
     if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
     const durationMinutes = (end - start) / 60000;
+    const nightMinutes = nightMinutesForSession(start.toISOString(), end.toISOString());
     addManualSessions([{
       date: manualForm.date, startTime: start.toISOString(), endTime: end.toISOString(),
-      durationMinutes, companion: manualForm.companion, isNight: manualForm.isNight,
+      durationMinutes, companion: manualForm.companion, nightMinutes,
     }]);
     setSheet(null);
   };
@@ -487,22 +462,7 @@ export default function App() {
           {!active ? (
             <>
               <div style={{ color: theme.inkSoft, fontSize: "13px", marginBottom: "14px" }}>{theme.copy.whoRiding}</div>
-              <div className="mb-4"><CompanionToggle value={pendingCompanion} onChange={setPendingCompanion} theme={theme} /></div>
-              <div className="mb-1">
-                <NightToggle value={pendingNight} onChange={(v) => { setPendingNight(v); setPendingNightAuto(false); }} theme={theme} label="Night driving" />
-              </div>
-              <div style={{ fontSize: "11px", color: theme.inkSoft, marginBottom: "18px", display: "flex", alignItems: "center", gap: "6px" }}>
-                {pendingNightAuto ? (
-                  <>Following sunset in Boulder — it's currently {formatTime(new Date(clockNow).toISOString())}</>
-                ) : (
-                  <>
-                    Set manually.
-                    <button onClick={() => setPendingNightAuto(true)} style={{ background: "none", border: "none", color: theme.accentDark, fontWeight: 600, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      Follow clock again
-                    </button>
-                  </>
-                )}
-              </div>
+              <div className="mb-5"><CompanionToggle value={pendingCompanion} onChange={setPendingCompanion} theme={theme} /></div>
               <button onClick={startSession} style={{
                 width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.onAccent, border: "none",
                 borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize,
@@ -518,7 +478,7 @@ export default function App() {
               <div className="flex items-center justify-between mb-3">
                 <div style={{ color: theme.accent, fontSize: "12px", fontWeight: 600, letterSpacing: "0.08em" }}>● SESSION IN PROGRESS</div>
                 <div className="flex items-center gap-2">
-                  {active.isNight && (
+                  {isNightAt(new Date(now)) && (
                     <div style={{ color: theme.night, background: theme.nightBg, borderRadius: "999px", padding: "3px 8px", display: "flex", alignItems: "center" }}><Moon size={12} /></div>
                   )}
                   <div style={{ color: COMPANIONS[active.companion].color, background: COMPANIONS[active.companion].bg, fontFamily: theme.displayFont, fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "999px" }}>
@@ -602,9 +562,9 @@ export default function App() {
                   {grouped[date].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => (
                     <div key={s.id} style={{ background: theme.card, borderRadius: theme.radiusSm, padding: "12px 14px", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: theme.shadow }}>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => toggleNight(s.id)} title="Toggle night driving" style={{ width: "28px", height: "28px", borderRadius: "999px", border: "none", background: s.isNight ? theme.nightBg : theme.locked, color: s.isNight ? theme.night : theme.inkSoft, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                          {s.isNight ? <Moon size={13} /> : <Sun size={13} />}
-                        </button>
+                        <div title={s.nightMinutes > 0 ? `${Math.round(s.nightMinutes)} min after dark` : "All daylight"} style={{ width: "28px", height: "28px", borderRadius: "999px", background: s.nightMinutes > 0 ? theme.nightBg : theme.locked, color: s.nightMinutes > 0 ? theme.night : theme.inkSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {s.nightMinutes > 0 ? <Moon size={13} /> : <Sun size={13} />}
+                        </div>
                         <div style={{ color: COMPANIONS[s.companion]?.color ?? theme.inkSoft, background: COMPANIONS[s.companion]?.bg ?? "transparent", fontFamily: theme.displayFont, fontSize: "11px", fontWeight: 600, padding: "3px 9px", borderRadius: "999px", minWidth: "38px", textAlign: "center" }}>
                           {COMPANIONS[s.companion]?.label ?? s.companion}
                         </div>
@@ -665,19 +625,19 @@ export default function App() {
             <div className="flex gap-3 mb-3">
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Start time</label>
-                <input type="time" value={manualForm.startTime} onChange={(e) => setManualForm((f) => ({ ...f, startTime: e.target.value, isNight: isNightAt(combineDateTime(f.date, e.target.value)) }))} style={inputStyle} />
+                <input type="time" value={manualForm.startTime} onChange={(e) => setManualForm((f) => ({ ...f, startTime: e.target.value }))} style={inputStyle} />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>End time</label>
                 <input type="time" value={manualForm.endTime} onChange={(e) => setManualForm((f) => ({ ...f, endTime: e.target.value }))} style={inputStyle} />
               </div>
             </div>
-            <div className="mb-3">
+            <div className="mb-5">
               <label style={labelStyle}>Who was along</label>
               <CompanionToggle value={manualForm.companion} onChange={(v) => setManualForm((f) => ({ ...f, companion: v }))} theme={theme} />
             </div>
-            <div className="mb-5">
-              <NightToggle value={manualForm.isNight} onChange={(v) => setManualForm((f) => ({ ...f, isNight: v }))} theme={theme} label="Night driving" />
+            <div style={{ fontSize: "12px", color: theme.inkSoft, marginBottom: "16px" }}>
+              Night-driving minutes are calculated automatically from actual sunset/sunrise times.
             </div>
             <button onClick={submitManual} style={{ width: "100%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accentDark})`, color: theme.onAccent, border: "none", borderRadius: theme.radiusSm, padding: "14px 0", fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
               <Check size={18} /> Add session
