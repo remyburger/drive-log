@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Play, Square, Download, Clock, ChevronDown, X, Trash2, Moon, Sun,
-  Plus, Check, ArrowLeft, LogOut, Palette, Car, Pencil,
+  Plus, Check, ArrowLeft, LogOut, Palette, Car, Pencil, FileText, FileSpreadsheet,
 } from "lucide-react";
 import { doc, onSnapshot, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -9,6 +9,8 @@ import { db, auth } from "./firebase";
 import { getThemeByKey, loadThemePref, saveThemePref, loadThemePrefForRole, saveThemePrefForRole, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
 import { isNightAt, nightMinutesForSession, getTodaySunTimes } from "./sun";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import Login from "./Login";
 
 const TOTAL_GOAL = 50;
@@ -55,6 +57,13 @@ function formatDuration(minutes) {
   const m = Math.round(minutes % 60);
   if (h === 0) return `${m} min`;
   return `${h}h ${pad(m)}m`;
+}
+
+function formatHM(minutes) {
+  if (!minutes || minutes < 0.5) return "-";
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return `${h}h ${m}m`;
 }
 
 function formatDateLabel(dateStr) {
@@ -180,6 +189,7 @@ export default function App() {
   const [authUser, setAuthUser] = useState(undefined); // undefined = still checking, null = signed out
   const [themeKey, setThemeKey] = useState(loadThemePref());
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const [sessions, setSessions] = useState([]);
   const [active, setActive] = useState(null);
@@ -365,6 +375,91 @@ export default function App() {
     a.href = url; a.download = `${theme.exportPrefix}-${todayStr()}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const exportPDF = () => {
+    const doc2 = new jsPDF({ unit: "pt", format: "letter" });
+    const marginX = 40;
+    const pageWidth = doc2.internal.pageSize.getWidth();
+    let y = 54;
+
+    doc2.setFont("helvetica", "bold");
+    doc2.setFontSize(18);
+    doc2.setTextColor(30, 30, 30);
+    doc2.text("Supervised Driving Log", marginX, y);
+
+    y += 18;
+    doc2.setFont("helvetica", "normal");
+    doc2.setFontSize(10);
+    doc2.setTextColor(120, 120, 120);
+    doc2.text(`Generated on ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })}`, marginX, y);
+
+    // Summary box
+    y += 22;
+    const boxW = pageWidth - marginX * 2;
+    const dayHoursTotal = Math.max(0, totals.totalHours - totals.nightHours);
+    doc2.setDrawColor(225, 222, 211);
+    doc2.setFillColor(248, 247, 244);
+    doc2.roundedRect(marginX, y, boxW, 56, 4, 4, "FD");
+
+    doc2.setTextColor(30, 30, 30);
+    const col1 = marginX + 16;
+    const col2 = marginX + boxW * 0.42;
+    const col3 = marginX + boxW * 0.7;
+
+    doc2.setFont("helvetica", "bold");
+    doc2.setFontSize(9);
+    doc2.text("STUDENT", col1, y + 20);
+    doc2.text("TOTAL DAYTIME HOURS", col2, y + 20);
+    doc2.text("TOTAL NIGHTTIME HOURS", col3, y + 20);
+
+    doc2.setFont("helvetica", "normal");
+    doc2.setFontSize(12);
+    doc2.text("Amelie", col1, y + 38);
+    doc2.text(formatHM(dayHoursTotal * 60) === "-" ? "0h 0m" : formatHM(dayHoursTotal * 60), col2, y + 38);
+    doc2.text(formatHM(totals.nightHours * 60) === "-" ? "0h 0m" : formatHM(totals.nightHours * 60), col3, y + 38);
+
+    y += 56 + 24;
+
+    const rows = [...sessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => {
+      const nm = nightMinutesForSession(s.startTime, s.endTime);
+      const dayMin = Math.max(0, s.durationMinutes - nm);
+      const dateLabel = new Date(s.startTime).toLocaleString(undefined, {
+        month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit",
+      });
+      return [dateLabel, formatHM(dayMin), formatHM(nm), companionLabel(s)];
+    });
+
+    autoTable(doc2, {
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      head: [["Date of Drive", "Daytime Hrs", "Nighttime Hrs", "Driving Supervisor"]],
+      body: rows,
+      headStyles: { fillColor: [43, 42, 39], textColor: 255, fontStyle: "bold", fontSize: 9 },
+      alternateRowStyles: { fillColor: [248, 247, 244] },
+      styles: { fontSize: 9, cellPadding: 7, textColor: [40, 40, 40] },
+      columnStyles: { 0: { cellWidth: 140 } },
+    });
+
+    let sigY = (doc2.lastAutoTable ? doc2.lastAutoTable.finalY : y) + 60;
+    const pageHeight = doc2.internal.pageSize.getHeight();
+    if (sigY > pageHeight - 60) {
+      doc2.addPage();
+      sigY = 70;
+    }
+
+    doc2.setDrawColor(150, 150, 150);
+    doc2.setTextColor(90, 90, 90);
+    doc2.setFontSize(10);
+    doc2.setFont("helvetica", "normal");
+
+    doc2.line(marginX, sigY, marginX + 240, sigY);
+    doc2.text("Parent/Guardian or Driving Instructor Signature", marginX, sigY + 14);
+
+    doc2.line(marginX + 300, sigY, marginX + 440, sigY);
+    doc2.text("Date", marginX + 300, sigY + 14);
+
+    doc2.save(`${theme.exportPrefix}-${todayStr()}.pdf`);
   };
 
   const openManual = () => {
@@ -606,15 +701,36 @@ export default function App() {
         </div>
 
         {/* Log header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3" style={{ position: "relative" }}>
           <button onClick={() => setShowLog((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: theme.ink, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize, cursor: "pointer", padding: 0 }}>
             Session Log
             <ChevronDown size={16} color={theme.inkSoft} style={{ transform: showLog ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
           </button>
           {sessions.length > 0 && (
-            <button onClick={exportCSV} style={{ display: "flex", alignItems: "center", gap: "6px", background: "transparent", border: `1px solid ${theme.gold}`, color: theme.gold, borderRadius: theme.radiusSm, padding: "6px 12px", fontFamily: theme.bodyFont, fontWeight: 500, fontSize: "13px", cursor: "pointer" }}>
-              <Download size={14} /> Export CSV
-            </button>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setShowExportMenu((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "transparent", border: `1px solid ${theme.gold}`, color: theme.gold, borderRadius: theme.radiusSm, padding: "6px 12px", fontFamily: theme.bodyFont, fontWeight: 500, fontSize: "13px", cursor: "pointer" }}>
+                <Download size={14} /> Export
+              </button>
+              {showExportMenu && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 20, background: theme.card,
+                  borderRadius: theme.radiusSm, boxShadow: theme.shadow, padding: "6px", minWidth: "160px",
+                }}>
+                  <button onClick={() => { exportCSV(); setShowExportMenu(false); }} style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none",
+                    color: theme.ink, fontFamily: theme.bodyFont, fontSize: "13px", padding: "9px 10px", borderRadius: theme.radiusSm, cursor: "pointer", textAlign: "left",
+                  }}>
+                    <FileSpreadsheet size={15} color={theme.inkSoft} /> Export as CSV
+                  </button>
+                  <button onClick={() => { exportPDF(); setShowExportMenu(false); }} style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: "8px", background: "transparent", border: "none",
+                    color: theme.ink, fontFamily: theme.bodyFont, fontSize: "13px", padding: "9px 10px", borderRadius: theme.radiusSm, cursor: "pointer", textAlign: "left",
+                  }}>
+                    <FileText size={15} color={theme.inkSoft} /> Export as PDF
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
