@@ -334,6 +334,12 @@ export default function App() {
     }
   };
 
+  const showToast = (icon, label, detail) => {
+    setToast({ icon, label, detail });
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+  };
+
   const startSession = () => {
     const now = new Date();
     persistActive({
@@ -363,104 +369,125 @@ export default function App() {
   const deleteSession = (id) => { persistSessions(sessionsRef.current.filter((s) => s.id !== id)); setConfirmDelete(null); };
 
   const exportCSV = () => {
-    const header = ["Date", "Start Time", "End Time", "Duration (min)", "Companion", "Night Driving (min)"];
-    const rows = [...sessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).map((s) => [
-      s.date, formatTime(s.startTime), formatTime(s.endTime), Math.round(s.durationMinutes),
-      companionLabel(s), Math.round(nightMinutesForSession(s.startTime, s.endTime)),
-    ]);
-    const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `${theme.exportPrefix}-${todayStr()}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const header = ["Date", "Start Time", "End Time", "Duration (min)", "Companion", "Night Driving (min)"];
+      const rows = [...sessions].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).map((s) => [
+        s.date, formatTime(s.startTime), formatTime(s.endTime), Math.round(s.durationMinutes),
+        companionLabel(s), Math.round(nightMinutesForSession(s.startTime, s.endTime)),
+      ]);
+      const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const filename = `${theme.exportPrefix}-${todayStr()}.csv`;
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      // Safari can silently cancel the download if the link is removed too
+      // quickly after click() — give it a moment before cleaning up.
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 200);
+      showToast("📄", "CSV downloaded", filename);
+    } catch (e) {
+      console.error("CSV export failed", e);
+      alert("Sorry, the CSV export failed: " + (e && e.message ? e.message : e));
+    }
   };
 
   const exportPDF = () => {
-    const doc2 = new jsPDF({ unit: "pt", format: "letter" });
-    const marginX = 40;
-    const pageWidth = doc2.internal.pageSize.getWidth();
-    let y = 54;
+    try {
+      const doc2 = new jsPDF({ unit: "pt", format: "letter" });
+      const marginX = 40;
+      const pageWidth = doc2.internal.pageSize.getWidth();
+      let y = 54;
 
-    doc2.setFont("helvetica", "bold");
-    doc2.setFontSize(18);
-    doc2.setTextColor(30, 30, 30);
-    doc2.text("Supervised Driving Log", marginX, y);
+      doc2.setFont("helvetica", "bold");
+      doc2.setFontSize(18);
+      doc2.setTextColor(30, 30, 30);
+      doc2.text("Supervised Driving Log", marginX, y);
 
-    y += 18;
-    doc2.setFont("helvetica", "normal");
-    doc2.setFontSize(10);
-    doc2.setTextColor(120, 120, 120);
-    doc2.text(`Generated on ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })}`, marginX, y);
+      y += 18;
+      doc2.setFont("helvetica", "normal");
+      doc2.setFontSize(10);
+      doc2.setTextColor(120, 120, 120);
+      doc2.text(`Generated on ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })}`, marginX, y);
 
-    // Summary box
-    y += 22;
-    const boxW = pageWidth - marginX * 2;
-    const dayHoursTotal = Math.max(0, totals.totalHours - totals.nightHours);
-    doc2.setDrawColor(225, 222, 211);
-    doc2.setFillColor(248, 247, 244);
-    doc2.roundedRect(marginX, y, boxW, 56, 4, 4, "FD");
+      // Summary box
+      y += 22;
+      const boxW = pageWidth - marginX * 2;
+      const dayHoursTotal = Math.max(0, totals.totalHours - totals.nightHours);
+      doc2.setDrawColor(225, 222, 211);
+      doc2.setFillColor(248, 247, 244);
+      doc2.roundedRect(marginX, y, boxW, 56, 4, 4, "FD");
 
-    doc2.setTextColor(30, 30, 30);
-    const col1 = marginX + 16;
-    const col2 = marginX + boxW * 0.42;
-    const col3 = marginX + boxW * 0.7;
+      doc2.setTextColor(30, 30, 30);
+      const col1 = marginX + 16;
+      const col2 = marginX + boxW * 0.42;
+      const col3 = marginX + boxW * 0.7;
 
-    doc2.setFont("helvetica", "bold");
-    doc2.setFontSize(9);
-    doc2.text("STUDENT", col1, y + 20);
-    doc2.text("TOTAL DAYTIME HOURS", col2, y + 20);
-    doc2.text("TOTAL NIGHTTIME HOURS", col3, y + 20);
+      doc2.setFont("helvetica", "bold");
+      doc2.setFontSize(9);
+      doc2.text("STUDENT", col1, y + 20);
+      doc2.text("TOTAL DAYTIME HOURS", col2, y + 20);
+      doc2.text("TOTAL NIGHTTIME HOURS", col3, y + 20);
 
-    doc2.setFont("helvetica", "normal");
-    doc2.setFontSize(12);
-    doc2.text("Amelie", col1, y + 38);
-    doc2.text(formatHM(dayHoursTotal * 60) === "-" ? "0h 0m" : formatHM(dayHoursTotal * 60), col2, y + 38);
-    doc2.text(formatHM(totals.nightHours * 60) === "-" ? "0h 0m" : formatHM(totals.nightHours * 60), col3, y + 38);
+      doc2.setFont("helvetica", "normal");
+      doc2.setFontSize(12);
+      doc2.text("Amelie", col1, y + 38);
+      doc2.text(formatHM(dayHoursTotal * 60) === "-" ? "0h 0m" : formatHM(dayHoursTotal * 60), col2, y + 38);
+      doc2.text(formatHM(totals.nightHours * 60) === "-" ? "0h 0m" : formatHM(totals.nightHours * 60), col3, y + 38);
 
-    y += 56 + 24;
+      y += 56 + 24;
 
-    const rows = [...sessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => {
-      const nm = nightMinutesForSession(s.startTime, s.endTime);
-      const dayMin = Math.max(0, s.durationMinutes - nm);
-      const dateLabel = new Date(s.startTime).toLocaleString(undefined, {
-        month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit",
+      const rows = [...sessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime)).map((s) => {
+        const nm = nightMinutesForSession(s.startTime, s.endTime);
+        const dayMin = Math.max(0, s.durationMinutes - nm);
+        const dateLabel = new Date(s.startTime).toLocaleString(undefined, {
+          month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit",
+        });
+        return [dateLabel, formatHM(dayMin), formatHM(nm), companionLabel(s)];
       });
-      return [dateLabel, formatHM(dayMin), formatHM(nm), companionLabel(s)];
-    });
 
-    autoTable(doc2, {
-      startY: y,
-      margin: { left: marginX, right: marginX },
-      head: [["Date of Drive", "Daytime Hrs", "Nighttime Hrs", "Driving Supervisor"]],
-      body: rows,
-      headStyles: { fillColor: [43, 42, 39], textColor: 255, fontStyle: "bold", fontSize: 9 },
-      alternateRowStyles: { fillColor: [248, 247, 244] },
-      styles: { fontSize: 9, cellPadding: 7, textColor: [40, 40, 40] },
-      columnStyles: { 0: { cellWidth: 140 } },
-    });
+      autoTable(doc2, {
+        startY: y,
+        margin: { left: marginX, right: marginX },
+        head: [["Date of Drive", "Daytime Hrs", "Nighttime Hrs", "Driving Supervisor"]],
+        body: rows,
+        headStyles: { fillColor: [43, 42, 39], textColor: 255, fontStyle: "bold", fontSize: 9 },
+        alternateRowStyles: { fillColor: [248, 247, 244] },
+        styles: { fontSize: 9, cellPadding: 7, textColor: [40, 40, 40] },
+        columnStyles: { 0: { cellWidth: 140 } },
+      });
 
-    let sigY = (doc2.lastAutoTable ? doc2.lastAutoTable.finalY : y) + 60;
-    const pageHeight = doc2.internal.pageSize.getHeight();
-    if (sigY > pageHeight - 60) {
-      doc2.addPage();
-      sigY = 70;
+      let sigY = (doc2.lastAutoTable ? doc2.lastAutoTable.finalY : y) + 60;
+      const pageHeight = doc2.internal.pageSize.getHeight();
+      if (sigY > pageHeight - 60) {
+        doc2.addPage();
+        sigY = 70;
+      }
+
+      doc2.setDrawColor(150, 150, 150);
+      doc2.setTextColor(90, 90, 90);
+      doc2.setFontSize(10);
+      doc2.setFont("helvetica", "normal");
+
+      doc2.line(marginX, sigY, marginX + 240, sigY);
+      doc2.text("Parent/Guardian or Driving Instructor Signature", marginX, sigY + 14);
+
+      doc2.line(marginX + 300, sigY, marginX + 440, sigY);
+      doc2.text("Date", marginX + 300, sigY + 14);
+
+      const filename = `${theme.exportPrefix}-${todayStr()}.pdf`;
+      doc2.save(filename);
+      showToast("📄", "PDF downloaded", filename);
+    } catch (e) {
+      console.error("PDF export failed", e);
+      alert("Sorry, the PDF export failed: " + (e && e.message ? e.message : e));
     }
-
-    doc2.setDrawColor(150, 150, 150);
-    doc2.setTextColor(90, 90, 90);
-    doc2.setFontSize(10);
-    doc2.setFont("helvetica", "normal");
-
-    doc2.line(marginX, sigY, marginX + 240, sigY);
-    doc2.text("Parent/Guardian or Driving Instructor Signature", marginX, sigY + 14);
-
-    doc2.line(marginX + 300, sigY, marginX + 440, sigY);
-    doc2.text("Date", marginX + 300, sigY + 14);
-
-    doc2.save(`${theme.exportPrefix}-${todayStr()}.pdf`);
   };
+
 
   const openManual = () => {
     setEditingId(null);
