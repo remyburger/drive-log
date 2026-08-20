@@ -186,7 +186,7 @@ export const KAWAII_THEME = {
     whoRiding: "Who's coming along? 🌸",
     startSession: "Let's go! 🚗💫",
     endSession: "We made it! 🎀",
-    totalHoursLabel: "Hours of sparkle",
+    totalHoursLabel: "Hours of driving",
     nightHoursLabel: "Starlight hours",
     dayHoursLabel: "Daylight hours",
   },
