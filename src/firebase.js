@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 // This is safe to commit — it's a public client identifier, not a secret.
@@ -15,5 +15,13 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// Offline persistence: caches data on-device (IndexedDB) so the app keeps
+// working without a connection, and automatically syncs any local changes
+// once connectivity returns. persistentMultipleTabManager allows this to
+// work correctly even if the app is open in more than one tab at once.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
 export const auth = getAuth(app);
