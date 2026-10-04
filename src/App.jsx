@@ -147,9 +147,9 @@ function ArcGauge({ theme, totalPct, nightPct }) {
           <Moon size={10} color="#FFFFFF" />
         </div>
       )}
-      <div style={{ position: "absolute", left: 0, right: 0, top: `${cy - 34}px`, textAlign: "center" }}>
-        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "24px", fontWeight: 700, color: theme.ink }}>{Math.round(totalPct)}%</div>
-        <div style={{ fontSize: "10px", color: theme.inkSoft, marginTop: "2px", lineHeight: 1.2, padding: "0 8px" }}>Practice hours</div>
+      <div style={{ position: "absolute", left: 0, right: 0, top: `${cy - 20}px`, textAlign: "center" }}>
+        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "22px", fontWeight: 700, color: theme.ink, lineHeight: 1 }}>{Math.round(totalPct)}%</div>
+        <div style={{ fontSize: "10px", color: theme.inkSoft, marginTop: "4px", lineHeight: 1.2, padding: "0 8px" }}>Practice hours</div>
       </div>
     </div>
   );
@@ -228,6 +228,12 @@ export default function App() {
   }, [role]);
 
   useEffect(() => {
+    // Wait for auth to actually resolve before opening these listeners —
+    // Firestore rules require a signed-in user, so starting them too early
+    // (before login completes) gets a permission-denied error that never
+    // automatically retries once auth becomes ready.
+    if (!authUser) return;
+
     const unsubSessions = onSnapshot(sessionsDocRef, (snap) => {
       const list = snap.exists() ? snap.data().list || [] : [];
       setSessions(list);
@@ -241,7 +247,7 @@ export default function App() {
     }, (err) => { console.error("Active listener error", err); setActiveLoaded(true); });
 
     return () => { unsubSessions(); unsubActive(); };
-  }, []);
+  }, [authUser]);
 
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
