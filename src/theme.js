@@ -284,7 +284,53 @@ export const OFFROAD_THEME = {
   },
 };
 
-export const ALL_THEMES = [MOM_THEME, DAD_THEME, NEON_THEME, KAWAII_THEME, RETRO_THEME, OFFROAD_THEME];
+export const CHRISTMAS_THEME = {
+  key: "christmas",
+  dark: false,
+  label: "Christmas",
+  title: "Jingle Drive Log",
+  eyebrow: "50-HOUR HOLIDAY LOG",
+  exportPrefix: "jingle-drive-log",
+
+  bg: "#F6F1E6",
+  card: "#FFFFFF",
+  ink: "#1F3A2E",
+  inkSoft: "#7C8B74",
+  accent: "#2F6E4F",
+  accentDark: "#1F4D37",
+  accentBg: "rgba(47,110,79,0.14)",
+  onAccent: "#FFFFFF",
+  night: "#1D3461",
+  nightBg: "rgba(29,52,97,0.14)",
+  rust: "#C23B3B",
+  onRust: "#FFFFFF",
+  gold: "#D4A72C",
+  goldBg: "rgba(212,167,44,0.18)",
+  divider: "#E8DEC8",
+  locked: "#F0EAD9",
+
+  displayFont: "'Mountains of Christmas', cursive",
+  bodyFont: "Nunito, sans-serif",
+  radius: "18px",
+  radiusSm: "12px",
+  shadow: "0 2px 4px rgba(31,58,46,0.08), 0 12px 24px -10px rgba(194,59,59,0.22)",
+  dividerStyle: "chain",
+  displayWeight: 700,
+  displayLetterSpacing: "0.01em",
+  displayStyle: "normal",
+  shout: false,
+
+  copy: {
+    whoRiding: "Who's riding shotgun? 🎄",
+    startSession: "Start the sleigh ride",
+    endSession: "Pull into the driveway",
+    totalHoursLabel: "Hours logged",
+    nightHoursLabel: "Starlight hours",
+    dayHoursLabel: "Daylight hours",
+  },
+};
+
+export const ALL_THEMES = [MOM_THEME, DAD_THEME, NEON_THEME, KAWAII_THEME, RETRO_THEME, OFFROAD_THEME, CHRISTMAS_THEME];
 
 const THEME_BY_KEY = ALL_THEMES.reduce((acc, t) => { acc[t.key] = t; return acc; }, {});
 
