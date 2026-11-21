@@ -330,7 +330,53 @@ export const CHRISTMAS_THEME = {
   },
 };
 
-export const ALL_THEMES = [MOM_THEME, DAD_THEME, NEON_THEME, KAWAII_THEME, RETRO_THEME, OFFROAD_THEME, CHRISTMAS_THEME];
+export const GRACIE_THEME = {
+  key: "gracie",
+  dark: false,
+  label: "Gracie",
+  title: "Golden Hour Drive Log",
+  eyebrow: "50-HOUR DRIVE DIARY",
+  exportPrefix: "drive-diary-log",
+
+  bg: "#F5EDE6",
+  card: "#FFFBF8",
+  ink: "#3B2F35",
+  inkSoft: "#A78F97",
+  accent: "#C98EA6",
+  accentDark: "#A66C86",
+  accentBg: "rgba(201,142,166,0.16)",
+  onAccent: "#FFFFFF",
+  night: "#5B5B81",
+  nightBg: "rgba(91,91,129,0.16)",
+  rust: "#8C5B6B",
+  onRust: "#FFFFFF",
+  gold: "#D7B98E",
+  goldBg: "rgba(215,185,142,0.2)",
+  divider: "#EADFD7",
+  locked: "#F1E8E0",
+
+  displayFont: "'Caveat', cursive",
+  bodyFont: "Karla, sans-serif",
+  radius: "20px",
+  radiusSm: "14px",
+  shadow: "0 2px 6px rgba(59,47,53,0.08), 0 14px 28px -12px rgba(201,142,166,0.3)",
+  dividerStyle: "dots",
+  displayWeight: 600,
+  displayLetterSpacing: "0",
+  displayStyle: "normal",
+  shout: false,
+
+  copy: {
+    whoRiding: "Who's coming along?",
+    startSession: "Start the drive",
+    endSession: "End the drive",
+    totalHoursLabel: "Hours logged",
+    nightHoursLabel: "Late night hours",
+    dayHoursLabel: "Golden hour",
+  },
+};
+
+export const ALL_THEMES = [MOM_THEME, DAD_THEME, NEON_THEME, KAWAII_THEME, RETRO_THEME, OFFROAD_THEME, CHRISTMAS_THEME, GRACIE_THEME];
 
 const THEME_BY_KEY = ALL_THEMES.reduce((acc, t) => { acc[t.key] = t; return acc; }, {});
 
