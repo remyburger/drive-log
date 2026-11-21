@@ -9,8 +9,6 @@ import { db, auth } from "./firebase";
 import { getThemeByKey, loadThemePref, saveThemePref, loadThemePrefForRole, saveThemePrefForRole, ALL_THEMES } from "./theme";
 import { getRoleForEmail, ROLE_LABELS } from "./roles";
 import { isNightAt, nightMinutesForSession, getTodaySunTimes } from "./sun";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import Login from "./Login";
 
 const TOTAL_GOAL = 50;
@@ -414,8 +412,15 @@ export default function App() {
     }
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     try {
+      // jsPDF/autoTable are only needed here, not for the rest of the app —
+      // loading them on demand (instead of at app startup) keeps the initial
+      // bundle smaller so the Start button shows up faster.
+      const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
       const doc2 = new jsPDF({ unit: "pt", format: "letter" });
       const marginX = 40;
       const pageWidth = doc2.internal.pageSize.getWidth();
@@ -576,7 +581,10 @@ export default function App() {
     return <Login theme={theme} />;
   }
 
-  if (!sessionsLoaded || !activeLoaded) {
+  // Only block on the small "active session" doc — that's all the Start/Stop
+  // button needs. The full session log loads in the background and fills in
+  // its own section below once it arrives, so it never delays starting a drive.
+  if (!activeLoaded) {
     return (
       <div style={{ background: theme.bg, minHeight: "100vh" }} className="flex items-center justify-center">
         <div style={{ textAlign: "center" }}>
@@ -791,7 +799,11 @@ export default function App() {
         </div>
 
         {showLog && (
-          sessions.length === 0 ? (
+          !sessionsLoaded ? (
+            <div style={{ color: theme.inkSoft, fontSize: "14px", background: theme.card, borderRadius: theme.radius, padding: "24px 18px", textAlign: "center", border: `1px dashed ${theme.divider}` }}>
+              Loading your log…
+            </div>
+          ) : sessions.length === 0 ? (
             <div style={{ color: theme.inkSoft, fontSize: "14px", background: theme.card, borderRadius: theme.radius, padding: "24px 18px", textAlign: "center", border: `1px dashed ${theme.divider}` }}>
               No sessions yet. Start one above, or tap + to add one manually.
             </div>
