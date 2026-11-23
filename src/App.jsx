@@ -86,6 +86,39 @@ function computeTotals(sessions) {
   return { totalHours: totalMinutes / 60, nightHours: nightMinutes / 60, sessionCount: sessions.length };
 }
 
+function computeLifetimeStats(sessions) {
+  const now = new Date();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)); // Monday
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  let weekMin = 0, monthMin = 0, longest = 0;
+  const dates = new Set();
+  sessions.forEach((s) => {
+    const start = new Date(s.startTime);
+    if (start >= weekStart) weekMin += s.durationMinutes;
+    if (start >= monthStart) monthMin += s.durationMinutes;
+    if (s.durationMinutes > longest) longest = s.durationMinutes;
+    dates.add(s.date);
+  });
+  // Streak = consecutive days with a drive, counting back from today
+  // (or from yesterday if there's no drive yet today).
+  let streak = 0;
+  let offset = dates.has(toLocalDateStr(now)) ? 0 : 1;
+  while (dates.has(toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset)))) {
+    streak += 1;
+    offset += 1;
+  }
+  return { weekMin, monthMin, longest, streak };
+}
+
+function LifetimeTile({ label, value, theme }) {
+  return (
+    <div style={{ background: theme.locked, borderRadius: theme.radiusSm, padding: "12px 10px", textAlign: "center" }}>
+      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "17px", fontWeight: 700, color: theme.ink, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: "11px", color: theme.inkSoft, marginTop: "4px" }}>{label}</div>
+    </div>
+  );
+}
+
 function achievedSet(totals) {
   const set = new Set();
   MILESTONES.forEach((m) => { if (m.test(totals)) set.add(m.id); });
@@ -196,7 +229,7 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [activeLoaded, setActiveLoaded] = useState(false);
-  const [showLog, setShowLog] = useState(true);
+  const [showAllLog, setShowAllLog] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [toast, setToast] = useState(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -554,8 +587,13 @@ export default function App() {
   const sunsetStr = todaySunTimes.sunset.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const achieved = achievedSet(totals);
   const totalPct = Math.min(100, (totals.totalHours / TOTAL_GOAL) * 100);
+  const goalMet = totals.totalHours >= TOTAL_GOAL && totals.nightHours >= NIGHT_GOAL;
+  const lifetime = computeLifetimeStats(sessions);
 
-  const grouped = sessions.reduce((acc, s) => { (acc[s.date] = acc[s.date] || []).push(s); return acc; }, {});
+  const RECENT_COUNT = 3;
+  const sortedSessions = [...sessions].sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+  const visibleSessions = showAllLog ? sortedSessions : sortedSessions.slice(0, RECENT_COUNT);
+  const grouped = visibleSessions.reduce((acc, s) => { (acc[s.date] = acc[s.date] || []).push(s); return acc; }, {});
   const dateKeys = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
 
   const inputStyle = {
@@ -732,7 +770,36 @@ export default function App() {
           )}
         </div>
 
-        {/* Progress */}
+        {/* Goal met: compact trophy card + lifetime stats */}
+        {goalMet && (
+          <div style={{ background: theme.card, borderRadius: theme.radius, boxShadow: theme.shadow, padding: "20px", marginBottom: "22px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+              <div style={{ fontSize: "28px" }}>🏁</div>
+              <div>
+                <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize, color: theme.ink, letterSpacing: theme.displayLetterSpacing }}>DMV goal met</div>
+                <div style={{ fontSize: "12px", color: theme.inkSoft, marginTop: "2px" }}>
+                  {Math.floor(totals.totalHours)}h logged · {Math.floor(totals.nightHours)}h at night
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+              <LifetimeTile label="Total hours" value={totals.totalHours.toFixed(1)} theme={theme} />
+              <LifetimeTile label="Drives" value={totals.sessionCount} theme={theme} />
+              <LifetimeTile label="Night hours" value={totals.nightHours.toFixed(1)} theme={theme} />
+              <LifetimeTile label="This week" value={formatHM(lifetime.weekMin) === "-" ? "0h" : formatHM(lifetime.weekMin)} theme={theme} />
+              <LifetimeTile label="This month" value={formatHM(lifetime.monthMin) === "-" ? "0h" : formatHM(lifetime.monthMin)} theme={theme} />
+              <LifetimeTile label="Longest drive" value={formatHM(lifetime.longest)} theme={theme} />
+            </div>
+            {lifetime.streak >= 2 && (
+              <div style={{ fontSize: "12px", color: theme.inkSoft, marginTop: "12px", textAlign: "center" }}>
+                🔥 {lifetime.streak}-day driving streak
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Progress (only until the DMV goal is met) */}
+        {!goalMet && (<>
         <div style={{ background: theme.card, borderRadius: theme.radius, boxShadow: theme.shadow, padding: "22px", marginBottom: "20px" }}>
           <div className="flex items-center gap-4">
             <ArcGauge theme={theme} totalPct={totalPct} nightPct={Math.min(100, (totals.nightHours / NIGHT_GOAL) * 100)} />
@@ -763,13 +830,13 @@ export default function App() {
             })}
           </div>
         </div>
+        </>)}
 
         {/* Log header */}
         <div className="flex items-center justify-between mb-3" style={{ position: "relative" }}>
-          <button onClick={() => setShowLog((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: theme.ink, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize, cursor: "pointer", padding: 0 }}>
-            Session Log
-            <ChevronDown size={16} color={theme.inkSoft} style={{ transform: showLog ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
-          </button>
+          <div style={{ color: theme.ink, fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize }}>
+            {showAllLog ? "Session Log" : "Recent Drives"}
+          </div>
           {sessions.length > 0 && (
             <div style={{ position: "relative" }}>
               <button onClick={() => setShowExportMenu((v) => !v)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "transparent", border: `1px solid ${theme.gold}`, color: theme.gold, borderRadius: theme.radiusSm, padding: "6px 12px", fontFamily: theme.bodyFont, fontWeight: 500, fontSize: "13px", cursor: "pointer" }}>
@@ -798,7 +865,7 @@ export default function App() {
           )}
         </div>
 
-        {showLog && (
+        {(
           !sessionsLoaded ? (
             <div style={{ color: theme.inkSoft, fontSize: "14px", background: theme.card, borderRadius: theme.radius, padding: "24px 18px", textAlign: "center", border: `1px dashed ${theme.divider}` }}>
               Loading your log…
@@ -852,6 +919,16 @@ export default function App() {
                   );})}
                 </div>
               ))}
+              {sessions.length > RECENT_COUNT && (
+                <button onClick={() => setShowAllLog((v) => !v)} style={{
+                  width: "100%", marginTop: "14px", background: "transparent", border: `1px solid ${theme.inkSoft}44`,
+                  color: theme.inkSoft, borderRadius: theme.radiusSm, padding: "11px 0", fontFamily: theme.bodyFont,
+                  fontWeight: 500, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                }}>
+                  {showAllLog ? "Show recent only" : `Show all ${sessions.length} drives`}
+                  <ChevronDown size={14} style={{ transform: showAllLog ? "rotate(180deg)" : "none" }} />
+                </button>
+              )}
             </div>
           )
         )}
