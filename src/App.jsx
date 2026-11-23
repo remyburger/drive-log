@@ -107,7 +107,17 @@ function computeLifetimeStats(sessions) {
     streak += 1;
     offset += 1;
   }
-  return { weekMin, monthMin, longest, streak };
+  // Best streak = longest run of consecutive drive days ever.
+  const dayNums = [...dates].map((d) => {
+    const [y, m, dd] = d.split("-").map(Number);
+    return Math.round(new Date(y, m - 1, dd).getTime() / 86400000);
+  }).sort((a, b) => a - b);
+  let best = 0, run = 0;
+  dayNums.forEach((n, i) => {
+    run = i > 0 && n - dayNums[i - 1] === 1 ? run + 1 : 1;
+    if (run > best) best = run;
+  });
+  return { weekMin, monthMin, longest, streak, bestStreak: Math.max(best, streak) };
 }
 
 function LifetimeTile({ label, value, theme }) {
@@ -786,7 +796,7 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
               <LifetimeTile label="This week" value={formatHM(lifetime.weekMin) === "-" ? "0h" : formatHM(lifetime.weekMin)} theme={theme} />
               <LifetimeTile label="This month" value={formatHM(lifetime.monthMin) === "-" ? "0h" : formatHM(lifetime.monthMin)} theme={theme} />
-              <LifetimeTile label="Day streak" value={lifetime.streak} theme={theme} />
+              <LifetimeTile label={`Day streak · best ${lifetime.bestStreak}`} value={lifetime.streak} theme={theme} />
             </div>
           </div>
         )}
