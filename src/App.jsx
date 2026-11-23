@@ -786,7 +786,7 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
               <LifetimeTile label="This week" value={formatHM(lifetime.weekMin) === "-" ? "0h" : formatHM(lifetime.weekMin)} theme={theme} />
               <LifetimeTile label="This month" value={formatHM(lifetime.monthMin) === "-" ? "0h" : formatHM(lifetime.monthMin)} theme={theme} />
-              <LifetimeTile label="Day streak" value={`${lifetime.streak > 0 ? "🔥 " : ""}${lifetime.streak}`} theme={theme} />
+              <LifetimeTile label="Day streak" value={lifetime.streak} theme={theme} />
             </div>
           </div>
         )}
