@@ -773,28 +773,21 @@ export default function App() {
         {/* Goal met: compact trophy card + lifetime stats */}
         {goalMet && (
           <div style={{ background: theme.card, borderRadius: theme.radius, boxShadow: theme.shadow, padding: "20px", marginBottom: "22px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-              <div style={{ fontSize: "28px" }}>🏁</div>
-              <div>
-                <div style={{ fontFamily: theme.displayFont, fontWeight: theme.displayWeight, fontSize: shoutButtonSize, color: theme.ink, letterSpacing: theme.displayLetterSpacing }}>DMV goal met</div>
-                <div style={{ fontSize: "12px", color: theme.inkSoft, marginTop: "2px" }}>
-                  {Math.floor(totals.totalHours)}h logged · {Math.floor(totals.nightHours)}h at night
-                </div>
+            <div style={{ fontSize: "12px", color: theme.inkSoft, fontWeight: 600, letterSpacing: "0.06em" }}>🏁 DMV GOAL MET</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginTop: "8px" }}>
+              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "44px", fontWeight: 700, color: theme.accent, lineHeight: 1 }}>
+                {totals.totalHours.toFixed(1)}
               </div>
+              <div style={{ fontSize: "14px", color: theme.inkSoft }}>hours driven</div>
+            </div>
+            <div style={{ fontSize: "12px", color: theme.inkSoft, marginTop: "6px", marginBottom: "16px" }}>
+              {totals.sessionCount} drives · {totals.nightHours.toFixed(1)}h at night · longest {formatHM(lifetime.longest)}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-              <LifetimeTile label="Total hours" value={totals.totalHours.toFixed(1)} theme={theme} />
-              <LifetimeTile label="Drives" value={totals.sessionCount} theme={theme} />
-              <LifetimeTile label="Night hours" value={totals.nightHours.toFixed(1)} theme={theme} />
               <LifetimeTile label="This week" value={formatHM(lifetime.weekMin) === "-" ? "0h" : formatHM(lifetime.weekMin)} theme={theme} />
               <LifetimeTile label="This month" value={formatHM(lifetime.monthMin) === "-" ? "0h" : formatHM(lifetime.monthMin)} theme={theme} />
-              <LifetimeTile label="Longest drive" value={formatHM(lifetime.longest)} theme={theme} />
+              <LifetimeTile label="Day streak" value={`${lifetime.streak > 0 ? "🔥 " : ""}${lifetime.streak}`} theme={theme} />
             </div>
-            {lifetime.streak >= 2 && (
-              <div style={{ fontSize: "12px", color: theme.inkSoft, marginTop: "12px", textAlign: "center" }}>
-                🔥 {lifetime.streak}-day driving streak
-              </div>
-            )}
           </div>
         )}
 
